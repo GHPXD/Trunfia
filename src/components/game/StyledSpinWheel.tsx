@@ -1,16 +1,15 @@
 // src/components/game/StyledSpinWheel.tsx
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   Easing,
-  interpolate,
-  Extrapolate,
   runOnJS,
 } from 'react-native-reanimated';
-import Svg, { Circle, Path, Text as SVGText } from 'react-native-svg';
+import Svg, { Path, Text as SVGText } from 'react-native-svg';
+import { COLORS, WHEEL_CONFIG } from '../../constants';
 
 interface StyledSpinWheelProps {
   players: string[];
@@ -18,11 +17,6 @@ interface StyledSpinWheelProps {
   isSpinning: boolean;
   onSpinComplete: (selectedPlayer: string) => void;
 }
-
-const { width: screenWidth } = Dimensions.get('window');
-const WHEEL_SIZE = screenWidth * 0.8;
-const CIRCLE_RADIUS = WHEEL_SIZE / 2;
-const INDICATOR_SIZE = 30;
 
 const StyledSpinWheel: React.FC<StyledSpinWheelProps> = ({ players, selectedPlayer, isSpinning, onSpinComplete }) => {
   const rotation = useSharedValue(0);
@@ -34,7 +28,7 @@ const StyledSpinWheel: React.FC<StyledSpinWheelProps> = ({ players, selectedPlay
   useEffect(() => {
     rotation.value = 0;
     setWinner(null);
-  }, [players]);
+  }, [players, rotation]);
 
   useEffect(() => {
     if (isSpinning && selectedPlayer) {
@@ -55,7 +49,7 @@ const StyledSpinWheel: React.FC<StyledSpinWheelProps> = ({ players, selectedPlay
         }
       });
     }
-  }, [isSpinning, selectedPlayer]);
+  }, [isSpinning, selectedPlayer, anglePerPlayer, onSpinComplete, players, rotation]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -68,12 +62,12 @@ const StyledSpinWheel: React.FC<StyledSpinWheelProps> = ({ players, selectedPlay
     const startAngle = index * angle - Math.PI / 2 - angle / 2;
     const endAngle = startAngle + angle;
 
-    const startX = CIRCLE_RADIUS + CIRCLE_RADIUS * Math.cos(startAngle);
-    const startY = CIRCLE_RADIUS + CIRCLE_RADIUS * Math.sin(startAngle);
-    const endX = CIRCLE_RADIUS + CIRCLE_RADIUS * Math.cos(endAngle);
-    const endY = CIRCLE_RADIUS + CIRCLE_RADIUS * Math.sin(endAngle);
+    const startX = WHEEL_CONFIG.RADIUS + WHEEL_CONFIG.RADIUS * Math.cos(startAngle);
+    const startY = WHEEL_CONFIG.RADIUS + WHEEL_CONFIG.RADIUS * Math.sin(startAngle);
+    const endX = WHEEL_CONFIG.RADIUS + WHEEL_CONFIG.RADIUS * Math.cos(endAngle);
+    const endY = WHEEL_CONFIG.RADIUS + WHEEL_CONFIG.RADIUS * Math.sin(endAngle);
 
-    return `M ${CIRCLE_RADIUS},${CIRCLE_RADIUS} L ${startX},${startY} A ${CIRCLE_RADIUS},${CIRCLE_RADIUS} 0 0 1 ${endX},${endY} z`;
+    return `M ${WHEEL_CONFIG.RADIUS},${WHEEL_CONFIG.RADIUS} L ${startX},${startY} A ${WHEEL_CONFIG.RADIUS},${WHEEL_CONFIG.RADIUS} 0 0 1 ${endX},${endY} z`;
   };
 
   return (
@@ -82,21 +76,21 @@ const StyledSpinWheel: React.FC<StyledSpinWheelProps> = ({ players, selectedPlay
         <View style={styles.wheelContainer}>
             <View style={styles.indicator} />
             <Animated.View style={animatedStyle}>
-                <Svg height={WHEEL_SIZE} width={WHEEL_SIZE} viewBox={`0 0 ${WHEEL_SIZE} ${WHEEL_SIZE}`}>
+                <Svg height={WHEEL_CONFIG.SIZE} width={WHEEL_CONFIG.SIZE} viewBox={`0 0 ${WHEEL_CONFIG.SIZE} ${WHEEL_CONFIG.SIZE}`}>
                 {players.map((player, index) => (
                     <Path
                     key={player}
                     d={getSegmentPath(index)}
-                    fill={index % 2 === 0 ? '#4CAF50' : '#8BC34A'}
-                    stroke="#FFF"
+                    fill={index % 2 === 0 ? COLORS.wheel.segment1 : COLORS.wheel.segment2}
+                    stroke={COLORS.white}
                     strokeWidth="2"
                     />
                 ))}
                 {players.map((player, index) => {
                     const angle = (index * anglePerPlayer) * (Math.PI / 180);
-                    const textRadius = CIRCLE_RADIUS * 0.7;
-                    const x = CIRCLE_RADIUS + textRadius * Math.sin(angle);
-                    const y = CIRCLE_RADIUS - textRadius * Math.cos(angle);
+                    const textRadius = WHEEL_CONFIG.RADIUS * 0.7;
+                    const x = WHEEL_CONFIG.RADIUS + textRadius * Math.sin(angle);
+                    const y = WHEEL_CONFIG.RADIUS - textRadius * Math.cos(angle);
                     return (
                     <SVGText
                         key={player}
@@ -133,43 +127,43 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.lightGray,
   },
   title: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
+    color: COLORS.darkGray,
     marginBottom: 40,
     textAlign: 'center',
   },
   wheelContainer: {
-    width: WHEEL_SIZE,
-    height: WHEEL_SIZE,
+    width: WHEEL_CONFIG.SIZE,
+    height: WHEEL_CONFIG.SIZE,
     justifyContent: 'center',
     alignItems: 'center',
   },
   indicator: {
     position: 'absolute',
     top: -10,
-    left: WHEEL_SIZE / 2 - INDICATOR_SIZE / 2,
+    left: WHEEL_CONFIG.SIZE / 2 - WHEEL_CONFIG.INDICATOR_SIZE / 2,
     width: 0,
     height: 0,
-    borderLeftWidth: INDICATOR_SIZE / 2,
-    borderRightWidth: INDICATOR_SIZE / 2,
-    borderBottomWidth: INDICATOR_SIZE,
+    borderLeftWidth: WHEEL_CONFIG.INDICATOR_SIZE / 2,
+    borderRightWidth: WHEEL_CONFIG.INDICATOR_SIZE / 2,
+    borderBottomWidth: WHEEL_CONFIG.INDICATOR_SIZE,
     borderLeftColor: 'transparent',
     borderRightColor: 'transparent',
-    borderBottomColor: '#d32f2f',
+    borderBottomColor: COLORS.wheel.indicator,
     zIndex: 10,
   },
   winnerTextContainer: {
     marginTop: 40,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.white,
     borderRadius: 30,
     elevation: 5,
-    shadowColor: '#000',
+    shadowColor: COLORS.black,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -177,7 +171,7 @@ const styles = StyleSheet.create({
   winnerText: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#4CAF50',
+    color: COLORS.success,
   },
 });
 

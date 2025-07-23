@@ -11,6 +11,7 @@ import {
   SafeAreaView,
   RefreshControl,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { ref, update } from 'firebase/database';
@@ -46,6 +47,28 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
   const [showChatModal, setShowChatModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [orientationSetting, setOrientationSetting] = useState<OrientationSetting>('automatic');
+
+  // --- Lógica do Toast ---
+  const [toastMessage, setToastMessage] = useState('');
+  const toastAnim = useRef(new Animated.Value(-100)).current;
+
+  const showToast = (message: string) => {
+    setToastMessage(message);
+    Animated.sequence([
+      Animated.timing(toastAnim, {
+        toValue: 60, // Posição do topo
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.delay(2500),
+      Animated.timing(toastAnim, {
+        toValue: -100,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+  // --- Fim da lógica do Toast ---
 
   const roomListenerUnsubscribe = useRef<(() => void) | null>(null);
 
@@ -94,16 +117,17 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
             roomListenerUnsubscribe.current();
             roomListenerUnsubscribe.current = null;
           }
-          Alert.alert('Aviso', 'A sala foi encerrada.');
+          showToast('A sala foi encerrada pelo host.');
           return;
         }
-        
+
         if (updatedRoom.players && updatedRoom.players[state.playerNickname]) {
             setCurrentRoom(updatedRoom);
             if (updatedRoom.status === 'playing') {
                 navigation.navigate('Game', { roomId: updatedRoom.id });
             }
         } else {
+            showToast('Você foi removido da sala.');
             setCurrentRoom(null);
         }
       });
@@ -126,7 +150,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleCreateRoom = async (isPrivate: boolean = false) => {
     if (!state.selectedDeck || !state.playerNickname || !state.playerAvatar) {
-      Alert.alert('Erro', 'Dados do jogador ou baralho não encontrados.');
+      showToast('Dados do jogador ou baralho não encontrados.');
       return;
     }
     setIsLoading(true);
@@ -134,7 +158,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
       const room = await createRoom(state.playerNickname, state.playerAvatar, state.selectedDeck.id, state.selectedDeck.name, isPrivate);
       setCurrentRoom(room);
     } catch (error) {
-      Alert.alert('Erro', 'Não foi possível criar a sala');
+      showToast('Não foi possível criar a sala');
     } finally {
       setIsLoading(false);
     }
@@ -142,7 +166,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
 
   const handleJoinRoom = async (room?: Room) => {
     if (!state.playerNickname || !state.playerAvatar) {
-        Alert.alert('Erro', 'Dados do jogador não encontrados.');
+        showToast('Dados do jogador não encontrados.');
         return;
     }
     setIsLoading(true);
@@ -154,7 +178,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
         targetRoom = await joinRoom(codeToJoin, state.playerNickname, state.playerAvatar);
       } else {
         if (!validateRoomCode(codeToJoin)) {
-          Alert.alert('Erro', 'Código inválido. Use 6 caracteres (letras e números).');
+          showToast('Código inválido. Use 6 caracteres (letras e números).');
           setIsLoading(false);
           return;
         }
@@ -163,7 +187,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
       setCurrentRoom(targetRoom);
       setRoomCode('');
     } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Não foi possível entrar na sala');
+      showToast(error.message || 'Não foi possível entrar na sala');
     } finally {
       setIsLoading(false);
     }
@@ -178,9 +202,9 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
       roomListenerUnsubscribe.current();
       roomListenerUnsubscribe.current = null;
     }
-    
+
     setCurrentRoom(null);
-    
+
     try {
       await leaveRoom(roomId, playerNickname);
     } catch (error) {
@@ -206,7 +230,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
     if (!state.currentRoom) return;
     const playerCount = Object.keys(state.currentRoom.players).length;
     if (playerCount < 2) {
-      Alert.alert('Jogadores Insuficientes', 'É necessário pelo menos 2 jogadores para iniciar o jogo.');
+      showToast('É necessário pelo menos 2 jogadores para iniciar.');
       return;
     }
     const allReady = Object.values(state.currentRoom.players).every(player => player.isReady);
@@ -230,7 +254,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
       await update(ref(database), updates);
     } catch (error) {
       console.error('Erro ao iniciar jogo:', error);
-      Alert.alert('Erro', 'Não foi possível iniciar o jogo. Tente novamente.');
+      showToast('Não foi possível iniciar o jogo. Tente novamente.');
     } finally {
       setIsLoading(false);
     }
@@ -240,7 +264,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
     if (!state.currentRoom) return;
     const currentPlayerCount = Object.keys(state.currentRoom.players).length;
     if (currentPlayerCount >= state.currentRoom.maxPlayers) {
-      Alert.alert('Sala Lotada', 'Não é possível adicionar mais jogadores.');
+      showToast('Sala Lotada. Não é possível adicionar mais jogadores.');
       return;
     }
     setIsLoading(true);
@@ -248,7 +272,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
       const botName = await addBotToRoom(state.currentRoom.id);
       console.log(`Bot ${botName} adicionado com sucesso`);
     } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Não foi possível adicionar o bot');
+      showToast(error.message || 'Não foi possível adicionar o bot');
     } finally {
       setIsLoading(false);
     }
@@ -258,7 +282,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
     if (!state.currentRoom) return;
     const bots = getBotPlayers(state.currentRoom.players);
     if (bots.length === 0) {
-      Alert.alert('Aviso', 'Não há bots na sala para remover.');
+      showToast('Não há bots na sala para remover.');
       return;
     }
     if (bots.length === 1) {
@@ -283,7 +307,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
       await removeBotFromRoom(state.currentRoom.id, botName);
       console.log(`Bot ${botName} removido com sucesso`);
     } catch (error: any) {
-      Alert.alert('Erro', error.message || 'Não foi possível remover o bot');
+      showToast(error.message || 'Não foi possível remover o bot');
     } finally {
       setIsLoading(false);
     }
@@ -295,6 +319,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
     const maxPlayers = state.currentRoom.maxPlayers || 4;
     return (
       <SafeAreaView style={styles.container}>
+        <Toast message={toastMessage} animatedValue={toastAnim} />
         <TouchableOpacity style={styles.settingsButton} onPress={() => setShowSettingsModal(true)}>
           <Text style={styles.settingsButtonText}>⚙️</Text>
         </TouchableOpacity>
@@ -356,6 +381,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Toast message={toastMessage} animatedValue={toastAnim} />
       <TouchableOpacity style={styles.settingsButton} onPress={() => setShowSettingsModal(true)}>
         <Text style={styles.settingsButtonText}>⚙️</Text>
       </TouchableOpacity>
@@ -384,8 +410,33 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
   );
 };
 
+// Componente Toast simples
+const Toast = ({ message, animatedValue }: { message: string, animatedValue: Animated.Value }) => {
+    return (
+        <Animated.View style={[styles.toastContainer, { transform: [{ translateY: animatedValue }] }]}>
+            <Text style={styles.toastText}>{message}</Text>
+        </Animated.View>
+    );
+};
+
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
+  toastContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 20,
+    right: 20,
+    backgroundColor: '#d9534f',
+    padding: 16,
+    borderRadius: 8,
+    zIndex: 9999,
+    alignItems: 'center',
+  },
+  toastText: {
+    color: '#FFF',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   settingsButton: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 8, },
   settingsButtonText: { fontSize: 28, },
   header: { padding: 24, paddingTop: 60, backgroundColor: '#FFF', borderBottomWidth: 1, borderBottomColor: '#E0E0E0' },

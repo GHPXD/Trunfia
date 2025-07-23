@@ -11,20 +11,19 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
-  ScrollView, // CORREÇÃO: Importação adicionada
+  ScrollView,
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../types';
 import { validateNickname, formatNickname } from '../utils/validation';
 import { saveUserData, getUserData } from '../services/storageService';
+import { AVATARS, COLORS } from '../constants'; // Importado de constants
 
 type LoginScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Login'>;
 
 interface Props {
   navigation: LoginScreenNavigationProp;
 }
-
-const AVATARS = ['😊', '😎', '😂', '🥳', '🤯', '👽', '🦊', '👻'];
 
 const LoginScreen: React.FC<Props> = ({ navigation }) => {
   const [nickname, setNickname] = useState('');
@@ -93,7 +92,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   if (isCheckingStorage) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#007AFF" />
+        <ActivityIndicator size="large" color={COLORS.primary} />
         <Text style={styles.loadingText}>Carregando...</Text>
       </View>
     );
@@ -139,7 +138,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             value={nickname}
             onChangeText={handleNicknameChange}
             placeholder="Digite seu apelido"
-            placeholderTextColor="#999"
+            placeholderTextColor={COLORS.mediumGray}
             maxLength={15}
             autoCapitalize="none"
             autoCorrect={false}
@@ -155,7 +154,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           onPress={handleLogin}
           disabled={!isFormValid || isLoading}
         >
-          {isLoading ? (<ActivityIndicator color="#FFF" />) : (<Text style={styles.buttonText}>Entrar</Text>)}
+          {isLoading ? (<ActivityIndicator color={COLORS.white} />) : (<Text style={styles.buttonText}>Entrar</Text>)}
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -165,18 +164,18 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.lightGray,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: COLORS.lightGray,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    color: '#666',
+    color: COLORS.textLight,
   },
   scrollContent: {
     flexGrow: 1,
@@ -190,12 +189,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: 'bold',
-    color: '#333',
+    color: COLORS.darkGray,
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: COLORS.textLight,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -212,15 +211,15 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#FFF',
+    backgroundColor: COLORS.white,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#DDD',
   },
   avatarSelected: {
-    borderColor: '#007AFF',
-    backgroundColor: '#E3F2FD',
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryLight,
     transform: [{ scale: 1.1 }],
   },
   avatarText: {
@@ -232,7 +231,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: COLORS.darkGray,
     marginBottom: 8,
   },
   input: {
@@ -242,24 +241,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    backgroundColor: '#FFF',
-    color: '#333',
+    backgroundColor: COLORS.white,
+    color: COLORS.darkGray,
   },
   inputValid: {
-    borderColor: '#4CAF50',
+    borderColor: COLORS.success,
   },
   inputError: {
-    borderColor: '#F44336',
+    borderColor: COLORS.danger,
   },
   characterCount: {
     fontSize: 12,
-    color: '#999',
+    color: COLORS.mediumGray,
     textAlign: 'right',
     marginTop: 4,
   },
   errorText: {
     fontSize: 14,
-    color: '#F44336',
+    color: COLORS.danger,
     marginTop: 8,
   },
   button: {
@@ -270,7 +269,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   buttonEnabled: {
-    backgroundColor: '#007AFF',
+    backgroundColor: COLORS.primary,
   },
   buttonDisabled: {
     backgroundColor: '#CCC',
@@ -278,7 +277,7 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#FFF',
+    color: COLORS.white,
   },
 });
 

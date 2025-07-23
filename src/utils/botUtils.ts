@@ -42,10 +42,17 @@ export const generateBotName = (existingPlayers: string[]): string => {
  */
 export const findBestAttribute = (card: Card): { attribute: string; value: number } => {
   let bestAttribute = '';
-  let bestValue = -Infinity; // CORREÇÃO AQUI
+  let bestValue = -Infinity;
 
-  // CORREÇÃO: Garante que a comparação funcione corretamente para todos os valores.
   Object.entries(card.attributes).forEach(([attribute, value]) => {
+    // Exceção para o atributo 'Fundação', onde menor é melhor.
+    const isLowerBetter = attribute === 'Fundação';
+    if (isLowerBetter) {
+      // Temporariamente não implementado para manter a lógica simples,
+      // mas aqui seria o local para uma estratégia diferente.
+      // Por enquanto, o bot não será especialista em 'Fundação'.
+    }
+
     if (value > bestValue) {
       bestValue = value;
       bestAttribute = attribute;
@@ -56,7 +63,7 @@ export const findBestAttribute = (card: Card): { attribute: string; value: numbe
 };
 
 /**
- * Estratégia de seleção para bots.
+ * Estratégia de seleção para bots (MELHORADA).
  */
 export const selectBestCard = (
   playerCards: string[],
@@ -70,15 +77,30 @@ export const selectBestCard = (
     throw new Error('Nenhuma carta disponível para o bot');
   }
 
-  const selectedCard = availableCards[Math.floor(Math.random() * availableCards.length)];
-  const reasoning = 'Seleção de carta aleatória, com escolha do melhor atributo.';
-  const confidence = 0.8;
+  let bestCardOverall: Card | null = null;
+  let bestAttributeOverall = { attribute: '', value: -Infinity };
+  
+  // Itera sobre todas as cartas para encontrar a melhor jogada possível
+  for (const card of availableCards) {
+    const cardBestAttribute = findBestAttribute(card);
+    if (cardBestAttribute.value > bestAttributeOverall.value) {
+      bestAttributeOverall = cardBestAttribute;
+      bestCardOverall = card;
+    }
+  }
 
-  const bestAttribute = findBestAttribute(selectedCard);
+  if (!bestCardOverall) {
+      // Fallback para o caso de nenhuma carta ser encontrada (improvável)
+      bestCardOverall = availableCards[0];
+      bestAttributeOverall = findBestAttribute(bestCardOverall);
+  }
+
+  const reasoning = `Analisou ${availableCards.length} cartas e escolheu '${bestCardOverall.name}' por causa do seu melhor atributo: '${bestAttributeOverall.attribute}'.`;
+  const confidence = 0.95; // Confiança maior, pois a decisão é baseada em dados
 
   return {
-    selectedCardId: selectedCard.id,
-    selectedAttribute: bestAttribute.attribute, // Agora o atributo selecionado é de fato o melhor da carta.
+    selectedCardId: bestCardOverall.id,
+    selectedAttribute: bestAttributeOverall.attribute,
     confidence,
     reasoning,
   };
