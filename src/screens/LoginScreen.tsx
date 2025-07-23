@@ -100,7 +100,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
   }
 
   return (
-    <KeyboardAvoidingView 
+    <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
@@ -114,7 +114,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             <Text style={styles.inputLabel}>Escolha seu avatar:</Text>
             <View style={styles.avatarGrid}>
                 {AVATARS.map((avatar) => (
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         key={avatar}
                         style={[
                             styles.avatarContainer,
@@ -133,7 +133,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
           <TextInput
             style={[
               styles.input,
-              validationError ? styles.inputError : 
+              validationError ? styles.inputError :
               (nickname.length > 0 && !validationError) ? styles.inputValid : null
             ]}
             value={nickname}

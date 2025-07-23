@@ -1,6 +1,6 @@
 // src/services/gameService.ts
 
-import { ref, update, get, onValue, off } from 'firebase/database';
+import { ref, update, get, onValue, off, push, set } from 'firebase/database';
 import { database } from '../config/firebase';
 import { GameState, Card, RoundResult, Room, Player } from '../types';
 import { distributeCards, selectRandomPlayer, compareCards, checkGameEnd, getNextPlayer, shuffleArray } from '../utils/gameUtils';
@@ -84,7 +84,7 @@ export const playCard = async (
     const roomSnapshot = await get(roomRef);
     if (!roomSnapshot.exists()) return;
     const room: Room = roomSnapshot.val();
-    
+
     const activePlayers = Object.values(room.players).filter(p => p.status === 'active');
     const totalActivePlayers = activePlayers.length;
 
@@ -99,10 +99,10 @@ export const playCard = async (
     await update(ref(database), updates);
 
     const updatedCards = { ...gameState.currentRoundCards, [playerNickname]: cardId };
-    
+
     if (Object.keys(updatedCards).length === totalActivePlayers) {
       console.log('✅ Todos os jogadores ativos jogaram. Avançando para fase de revelação.');
-      
+
       await update(ref(database), {
         [`${GAMES_PATH}/${roomId}/gamePhase`]: 'revealing',
       });
@@ -162,6 +162,10 @@ export const processRoundResult = async (
       timestamp: new Date().toISOString(),
     };
 
+    // Salva o resultado da rodada em um caminho separado para não sobrecarregar o gameState.
+    const historyRef = push(ref(database, `gameHistory/${roomId}`));
+    await set(historyRef, roundResult);
+
     const updatedPlayerCards = { ...gameState.playerCards };
     const playedCards = Object.values(gameState.currentRoundCards);
 
@@ -176,7 +180,7 @@ export const processRoundResult = async (
       ...playedCards
     ]);
     updatedPlayerCards[winner] = newWinnerDeck;
-    
+
     Object.keys(players).forEach(p => {
         if (updatedPlayerCards[p]?.length === 0 && players[p].status === 'active') {
             players[p].status = 'eliminated';
@@ -190,11 +194,12 @@ export const processRoundResult = async (
       [`${GAMES_PATH}/${roomId}/roundWinner`]: winner,
       [`${GAMES_PATH}/${roomId}/gameWinner`]: gameWinner,
       [`${GAMES_PATH}/${roomId}/playerCards`]: updatedPlayerCards,
-      [`${GAMES_PATH}/${roomId}/roundHistory`]: [...(gameState.roundHistory || []), roundResult],
       [`${GAMES_PATH}/${roomId}/gamePhase`]: gameWinner ? 'finished' : 'comparing',
       [`${ROOMS_PATH}/${roomId}/players`]: players,
+      // Garante que a propriedade de histórico seja removida do estado principal do jogo.
+      [`${GAMES_PATH}/${roomId}/roundHistory`]: null,
     };
-    
+
     if (!gameWinner) {
       updates[`${GAMES_PATH}/${roomId}/currentPlayer`] = winner;
     }
@@ -243,7 +248,7 @@ export const listenToGameState = (
   callback: (gameState: GameState | null) => void
 ): (() => void) => {
   const gameRef = ref(database, `${GAMES_PATH}/${roomId}`);
-  
+
   const unsubscribe = onValue(gameRef, (snapshot) => {
     const gameState = snapshot.exists() ? snapshot.val() : null;
     callback(gameState);

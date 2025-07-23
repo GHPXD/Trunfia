@@ -49,9 +49,6 @@ const AVAILABLE_DECKS: Deck[] = [
 const DeckSelectionScreen: React.FC<Props> = ({ navigation }) => {
   const { state, setSelectedDeck, setPlayerNickname, setPlayerAvatar } = useGame();
   const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
-  
-  // CORREÇÃO: Renomeada para _setIsLoading para remover o aviso do linter.
-  const [isLoading, _setIsLoading] = useState(false);
 
   const loadUserData = useCallback(async () => {
     try {
@@ -125,9 +122,9 @@ const DeckSelectionScreen: React.FC<Props> = ({ navigation }) => {
             !state.selectedDeck && styles.buttonDisabled,
           ]}
           onPress={handleContinueToLobby}
-          disabled={!state.selectedDeck || isLoading}>
+          disabled={!state.selectedDeck}>
           <Text style={styles.buttonText}>
-            {isLoading ? 'Carregando...' : 'Continuar para o Lobby'}
+            Continuar para o Lobby
           </Text>
         </TouchableOpacity>
       </View>

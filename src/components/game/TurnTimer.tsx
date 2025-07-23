@@ -1,7 +1,14 @@
 // src/components/game/TurnTimer.tsx
 
-import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  cancelAnimation,
+  interpolateColor,
+} from 'react-native-reanimated';
 
 interface TurnTimerProps {
   duration: number; // em segundos
@@ -12,27 +19,18 @@ interface TurnTimerProps {
 
 const TurnTimer: React.FC<TurnTimerProps> = ({ duration, isPlaying, onTimeEnd, size = 60 }) => {
   const [timeLeft, setTimeLeft] = useState(duration);
-  const animatedProgress = useRef(new Animated.Value(1)).current;
+  const progress = useSharedValue(1);
 
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined;
-    
+
     if (isPlaying) {
       // Reseta o timer e a animação
       setTimeLeft(duration);
-      animatedProgress.setValue(1);
+      progress.value = 1; // Reseta o valor compartilhado
 
       // Inicia a animação da barra de progresso
-      Animated.timing(animatedProgress, {
-        toValue: 0,
-        duration: duration * 1000,
-        useNativeDriver: false,
-      }).start(({ finished }) => {
-        // onTimeEnd será chamado pelo setInterval para garantir precisão
-        if (finished) {
-            // A animação terminou, mas o timer controla o fim
-        }
-      });
+      progress.value = withTiming(0, { duration: duration * 1000 });
 
       // Inicia o contador de segundos
       interval = setInterval(() => {
@@ -47,40 +45,36 @@ const TurnTimer: React.FC<TurnTimerProps> = ({ duration, isPlaying, onTimeEnd, s
       }, 1000);
 
     } else {
-      // CORREÇÃO: Usa o método correto para parar a animação
-      animatedProgress.stopAnimation();
-      animatedProgress.setValue(1);
+      // Para a animação e reseta o valor
+      cancelAnimation(progress);
+      progress.value = 1;
     }
 
     return () => {
-        if (interval) {
-            clearInterval(interval);
-        }
+      if (interval) {
+        clearInterval(interval);
+      }
+      cancelAnimation(progress); // Limpa a animação ao desmontar
     };
-  }, [isPlaying, duration, onTimeEnd, animatedProgress]);
+  }, [isPlaying, duration, onTimeEnd, progress]);
 
-  const widthInterpolation = animatedProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0%', '100%'],
+  const animatedStyle = useAnimatedStyle(() => {
+    const backgroundColor = interpolateColor(
+      progress.value,
+      [0, 0.3, 0.7, 1],
+      ['#d9534f', '#f0ad4e', '#5cb85c', '#5cb85c'] // Vermelho, Laranja, Verde
+    );
+
+    return {
+      width: `${progress.value * 100}%`,
+      backgroundColor,
+    };
   });
 
-  const colorInterpolation = animatedProgress.interpolate({
-    inputRange: [0, 0.3, 0.7],
-    outputRange: ['#d9534f', '#f0ad4e', '#5cb85c'], // Vermelho, Laranja, Verde
-  });
-  
   return (
     <View style={[styles.container, { width: size, height: size }]}>
       <View style={styles.backgroundBar} />
-      <Animated.View 
-        style={[
-          styles.progressBar, 
-          { 
-            width: widthInterpolation,
-            backgroundColor: colorInterpolation,
-          }
-        ]} 
-      />
+      <Animated.View style={[styles.progressBar, animatedStyle]} />
       <View style={styles.textContainer}>
         <Text style={styles.timerText}>{timeLeft}</Text>
       </View>
@@ -101,11 +95,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#e9ecef',
     borderWidth: 5,
     borderColor: '#ced4da',
+    overflow: 'hidden', // Garante que a barra de progresso não vaze
   },
   progressBar: {
     position: 'absolute',
     height: '100%',
-    borderRadius: 50,
   },
   textContainer: {
     ...StyleSheet.absoluteFillObject,

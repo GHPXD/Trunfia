@@ -54,8 +54,8 @@ const PlayerDisplay: React.FC<PlayerDisplayProps> = ({
   const positionStyleKey = `${position}_${orientation}` as keyof typeof positionStyles;
 
   return (
-    <View 
-        style={[styles.container, positionStyles[positionStyleKey]]} 
+    <View
+        style={[styles.container, positionStyles[positionStyleKey]]}
         onLayout={handleOnLayout}
     >
       <View style={[styles.playerInfo, { flexDirection }, isCurrentPlayer && styles.currentPlayerHighlight]}>

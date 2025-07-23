@@ -1,5 +1,5 @@
 // src/screens/GameScreen.tsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, ActivityIndicator, ImageBackground, Dimensions, LayoutRectangle } from 'react-native';
 import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -9,14 +9,7 @@ import { RootStackParamList, GameState, Card } from '../types';
 import { useGame } from '../contexts/GameContext';
 import { useAnimationCoordinates } from '../contexts/AnimationCoordinateContext';
 import { useOrientation, Orientation as OrientationType } from '../hooks/useOrientation';
-import {
-  startGame,
-  playCard,
-  selectAttribute,
-  processRoundResult,
-  startNextRound,
-  listenToGameState,
-} from '../services/gameService';
+import { startGame, listenToGameState } from '../services/gameService';
 import { getDeckCards } from '../data/decks';
 import { getOrientationSetting } from '../services/storageService';
 import RodadaInfo from '../components/game/RodadaInfo';
@@ -26,15 +19,8 @@ import PlayerDisplay from '../components/game/PlayerDisplay';
 import Arena from '../components/game/Arena';
 import AnimatedHand from '../components/game/AnimatedHand';
 import Carta from '../components/game/Carta';
-
-// Hook customizado para obter o valor anterior de uma prop ou estado
-function usePrevious(value: any) {
-  const ref = useRef<GameState | null>(null);
-  useEffect(() => {
-    ref.current = value;
-  });
-  return ref.current;
-}
+import { usePlayerHand } from '../hooks/usePlayerHand'; // NOVO
+import { useGameUpdates } from '../hooks/useGameUpdates'; // NOVO
 
 // Componente para a "carta fantasma" que voa da mão do oponente para a arena
 const OpponentCardAnimation: React.FC<{ card: Card, startPos: LayoutRectangle, onAnimationComplete: () => void }> = ({ card, startPos, onAnimationComplete }) => {
@@ -84,6 +70,7 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
   const { coordinates } = useAnimationCoordinates();
   const orientation = useOrientation();
 
+  // Configuração de orientação da tela
   useEffect(() => {
     const lockOrientation = async () => {
       try {
@@ -99,46 +86,35 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
         console.error('Falha ao travar a orientação:', e);
       }
     };
-
     lockOrientation();
-
-    return () => {
-      Orientation.unlockAllOrientations();
-    };
+    return () => Orientation.unlockAllOrientations();
   }, []);
 
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [allCards, setAllCards] = useState<Card[]>([]);
   const [playerHand, setPlayerHand] = useState<Card[]>([]);
-  const isProcessingRound = useRef(false);
-  const [cardToConfirm, setCardToConfirm] = useState<Card | null>(null);
-  const [tentativeAttribute, setTentativeAttribute] = useState<string | null>(null);
-  const [isRoundEnding, setIsRoundEnding] = useState(false);
-  const [animatingOpponentCard, setAnimatingOpponentCard] = useState<{ card: Card, nickname: string } | null>(null);
 
-  const prevGameState = usePrevious(gameState);
+  const isCurrentPlayer = gameState?.currentPlayer === state.playerNickname;
+  const hasPlayedCard = !!(gameState?.currentRoundCards && gameState?.currentRoundCards[state.playerNickname]);
 
-  const handleStartGame = useCallback(async (cards: Card[]) => {
-    if (!state.currentRoom || !state.currentRoom.players) return;
-    const players = Object.keys(state.currentRoom.players);
-    if (players.length < 2) return;
-    try {
-      await startGame(roomId, players, cards);
-    } catch (error) {
-      Alert.alert('Erro', 'Não foi possível iniciar o jogo');
-    }
-  }, [roomId, state.currentRoom]);
+  // Usando os novos hooks para gerenciar a lógica
+  const {
+    cardToConfirm,
+    tentativeAttribute,
+    setTentativeAttribute,
+    handleCardSelection,
+    handleConfirmTurn,
+    resetHandState,
+  } = usePlayerHand({ roomId, playerNickname: state.playerNickname, isCurrentPlayer, hasPlayedCard });
 
-  const updatePlayerHand = useCallback((currentGameState: GameState | null, cards: Card[]) => {
-    if (!currentGameState || !cards.length || !currentGameState.playerCards || !state.playerNickname) {
-      setPlayerHand([]);
-      return;
-    }
-    const playerCardIds = currentGameState.playerCards[state.playerNickname] || [];
-    const hand = playerCardIds.map(id => cards.find(card => card.id === id)).filter(Boolean) as Card[];
-    setPlayerHand(hand);
-  }, [state.playerNickname]);
+  const {
+    isRoundEnding,
+    animatingOpponentCard,
+    onAnimationComplete,
+    clearAnimatingOpponentCard,
+  } = useGameUpdates({ gameState, roomId, playerNickname: state.playerNickname, allCards, currentRoom: state.currentRoom, resetHandState });
 
+  // Busca as cartas do baralho selecionado
   useEffect(() => {
     if (!state.selectedDeck) {
       navigation.goBack();
@@ -147,115 +123,34 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
     setAllCards(getDeckCards(state.selectedDeck.id));
   }, [state.selectedDeck, navigation]);
 
+  // Inicia o jogo se for o host
   useEffect(() => {
-    if (roomId !== 'SOLO_GAME_ROOM' && state.currentRoom && allCards.length > 0 && !gameState) {
+    if (state.currentRoom && allCards.length > 0 && !gameState) {
       if (state.currentRoom.hostNickname === state.playerNickname) {
-        handleStartGame(allCards);
+        const players = Object.keys(state.currentRoom.players);
+        if (players.length >= 2) {
+          startGame(roomId, players, allCards);
+        }
       }
     }
-  }, [state.currentRoom, allCards, gameState, state.playerNickname, handleStartGame, roomId]);
+  }, [state.currentRoom, allCards, gameState, state.playerNickname, roomId]);
 
+  // Listener para o estado do jogo
   useEffect(() => {
     const unsubscribe = listenToGameState(roomId, setGameState);
     return () => unsubscribe();
   }, [roomId]);
 
+  // Atualiza a mão do jogador
   useEffect(() => {
-    updatePlayerHand(gameState, allCards);
-  }, [gameState, allCards, updatePlayerHand]);
-
-  useEffect(() => {
-    if (gameState?.gamePhase === 'selecting') {
-      setCardToConfirm(null);
-      setTentativeAttribute(null);
-    }
-    
-    if (prevGameState && gameState?.currentRoundCards) {
-      const prevCards = Object.keys(prevGameState?.currentRoundCards || {});
-      const currentCards = Object.keys(gameState.currentRoundCards);
-      const newPlayerCard = currentCards.find(p => !prevCards.includes(p) && p !== state.playerNickname);
-      
-      if (newPlayerCard) {
-        const cardId = gameState.currentRoundCards[newPlayerCard];
-        const card = allCards.find(c => c.id === cardId);
-        if (card) {
-          setAnimatingOpponentCard({ card, nickname: newPlayerCard });
-        }
-      }
-    }
-
-    if (gameState?.gamePhase === 'revealing' && !isProcessingRound.current) {
-        const activePlayersCount = Object.values(state.currentRoom?.players || {}).filter(p => p.status === 'active').length;
-        if (Object.keys(gameState.currentRoundCards).length === activePlayersCount && gameState.selectedAttribute) {
-            isProcessingRound.current = true;
-            setTimeout(() => {
-                processRoundResult(roomId, gameState, allCards).finally(() => {
-                    isProcessingRound.current = false;
-                });
-            }, 1000);
-        }
-    }
-    
-    if (gameState?.gamePhase === 'comparing' && !isRoundEnding) {
-      if(gameState.gameWinner) {
-        Alert.alert('Fim de Jogo!', `O vencedor é ${gameState.gameWinner}!`, [{ text: 'OK', onPress: () => navigation.goBack() }]);
-      } else {
-        setIsRoundEnding(true);
-      }
-    }
-  }, [gameState, allCards, prevGameState, state.playerNickname, roomId, isRoundEnding, navigation]);
-
-  const isHost = () => state.currentRoom?.hostNickname === state.playerNickname;
-
-  const handleNextRound = useCallback(async () => {
-    if (!isHost()) return;
-    try {
-      await startNextRound(roomId);
-    } catch (error) {
-      Alert.alert("Erro", "Não foi possível iniciar a próxima rodada.");
-    }
-  }, [roomId, state.currentRoom]);
-
-  const onRoundEndAnimationComplete = useCallback(() => {
-    setIsRoundEnding(false);
-    if(isHost()) {
-        handleNextRound();
-    }
-  }, [handleNextRound, state.currentRoom]);
-
-  const isCurrentPlayer = gameState?.currentPlayer === state.playerNickname;
-  const hasPlayedCard = !!(gameState?.currentRoundCards && gameState?.currentRoundCards[state.playerNickname]);
-
-  const handleCardSelection = (card: Card) => {
-    if (hasPlayedCard) return;
-    if (isCurrentPlayer) {
-      setCardToConfirm(card);
+    if (gameState && allCards.length > 0 && gameState.playerCards) {
+      const playerCardIds = gameState.playerCards[state.playerNickname] || [];
+      const hand = playerCardIds.map(id => allCards.find(card => card.id === id)).filter(Boolean) as Card[];
+      setPlayerHand(hand);
     } else {
-      playCard(roomId, state.playerNickname, card.id).catch(error => {
-        Alert.alert('Erro de Conexão', 'Não foi possível registrar sua jogada.');
-      });
+      setPlayerHand([]);
     }
-  };
-
-  const handleConfirmTurn = () => {
-    if (!cardToConfirm || !isCurrentPlayer) return;
-    if (!tentativeAttribute) {
-      Alert.alert('Atenção', 'Você deve escolher um atributo para jogar.');
-      return;
-    }
-
-    const playedCardId = cardToConfirm.id;
-    const playedAttribute = tentativeAttribute;
-    setCardToConfirm(null);
-    setTentativeAttribute(null);
-
-    Promise.all([
-      playCard(roomId, state.playerNickname, playedCardId),
-      selectAttribute(roomId, playedAttribute)
-    ]).catch(error => {
-      Alert.alert('Erro de Conexão', 'Não foi possível confirmar a jogada.');
-    });
-  };
+  }, [gameState, allCards, state.playerNickname]);
 
   if (!state.currentRoom || !state.currentRoom.players || !gameState) {
     return (<SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#007AFF" /><Text style={styles.loadingText}>Carregando jogo...</Text></SafeAreaView>);
@@ -264,9 +159,9 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
   if (gameState.gamePhase === 'spinning') {
     return (
       <SafeAreaView style={styles.container}>
-        <StyledSpinWheel 
-            players={Object.keys(state.currentRoom.players)} 
-            selectedPlayer={gameState.spinResult || null} 
+        <StyledSpinWheel
+            players={Object.keys(state.currentRoom.players)}
+            selectedPlayer={gameState.spinResult || null}
             isSpinning={true}
             onSpinComplete={() => {}}
         />
@@ -287,7 +182,6 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
   };
   const opponentPositions = getOpponentPositions(orientation, opponents.length);
   const isHandVisible = gameState.gamePhase === 'selecting' && !cardToConfirm && !hasPlayedCard;
-  
   const startPos = animatingOpponentCard ? coordinates[animatingOpponentCard.nickname] : null;
 
   return (
@@ -308,15 +202,15 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
           />
         ))}
 
-        <Arena 
-          gameState={gameState} 
+        <Arena
+          gameState={gameState}
           allCards={allCards}
           isRoundEnding={isRoundEnding}
-          onAnimationComplete={onRoundEndAnimationComplete}
+          onAnimationComplete={onAnimationComplete}
           animatingCardPlayer={animatingOpponentCard?.nickname}
           orientation={orientation}
         />
-        
+
         <View style={[styles.bottomSection, styles[`bottomSection_${orientation}`]]}>
           <AnimatedHand
               cards={playerHand}
@@ -331,7 +225,7 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
           <OpponentCardAnimation
             card={animatingOpponentCard.card}
             startPos={startPos}
-            onAnimationComplete={() => setAnimatingOpponentCard(null)}
+            onAnimationComplete={clearAnimatingOpponentCard}
           />
         )}
 
@@ -351,7 +245,7 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
             />
           </View>
         )}
-        
+
         {cardToConfirm && isCurrentPlayer && !hasPlayedCard && (
             <View style={[
                 styles.actionButtonContainer,

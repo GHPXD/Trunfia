@@ -17,7 +17,7 @@ interface CartaProps {
 }
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = Math.min(width * 0.45, 200); 
+const CARD_WIDTH = Math.min(width * 0.45, 200);
 const CARD_HEIGHT = CARD_WIDTH * 1.5;
 
 const Carta: React.FC<CartaProps> = ({
@@ -34,7 +34,7 @@ const Carta: React.FC<CartaProps> = ({
 
   useEffect(() => {
     rotate.value = withTiming(isRevealed ? 180 : 0, { duration: 400 });
-  }, [isRevealed, rotate]);
+  }, [isRevealed]);
 
   const handlePress = () => {
     if (isSelectable && onSelect) {
@@ -46,7 +46,7 @@ const Carta: React.FC<CartaProps> = ({
   const frontAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotateY: `${rotate.value}deg` }],
   }));
-  
+
   // Animação para o lado que começa escondido (a frente)
   const backAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotateY: `${rotate.value + 180}deg` }],
@@ -73,8 +73,8 @@ const Carta: React.FC<CartaProps> = ({
       <Animated.View style={[styles.cardBase, styles.cardFront, backAnimatedStyle]}>
         <View style={styles.imageContainer}>
           {card.image ? (
-            <Image 
-              source={{ uri: card.image }} 
+            <Image
+              source={{ uri: card.image }}
               style={styles.cardImage}
               resizeMode="cover"
             />

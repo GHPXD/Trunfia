@@ -5,7 +5,7 @@ import { Card, BotDecision } from '../types';
 /**
  * Gera nomes aleatórios para bots
  */
-const BOT_NAMES = [ 
+const BOT_NAMES = [
   'Boteco do Alphinha',     // Sempre no bar, nunca no código 🍻
   'Betadinho Nervoso',      // Vive em beta e surtando 😬
   'Gamagrelado',            // Magrelo e bugado 🦴
@@ -22,7 +22,7 @@ const BOT_NAMES = [
 
 export const generateBotName = (existingPlayers: string[]): string => {
   const availableNames = BOT_NAMES.filter(name => !existingPlayers.includes(name));
-  
+
   if (availableNames.length === 0) {
     let counter = 1;
     let botName = `Bot ${counter}`;
@@ -32,7 +32,7 @@ export const generateBotName = (existingPlayers: string[]): string => {
     }
     return botName;
   }
-  
+
   const randomIndex = Math.floor(Math.random() * availableNames.length);
   return availableNames[randomIndex];
 };
@@ -42,8 +42,8 @@ export const generateBotName = (existingPlayers: string[]): string => {
  */
 export const findBestAttribute = (card: Card): { attribute: string; value: number } => {
   let bestAttribute = '';
-  let bestValue = -1;
-  
+  let bestValue = -Infinity; // CORREÇÃO AQUI
+
   // CORREÇÃO: Garante que a comparação funcione corretamente para todos os valores.
   Object.entries(card.attributes).forEach(([attribute, value]) => {
     if (value > bestValue) {
@@ -51,7 +51,7 @@ export const findBestAttribute = (card: Card): { attribute: string; value: numbe
       bestAttribute = attribute;
     }
   });
-  
+
   return { attribute: bestAttribute, value: bestValue };
 };
 
