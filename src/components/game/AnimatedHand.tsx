@@ -10,6 +10,8 @@ import Animated, {
   withDelay,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import HapticFeedback from 'react-native-haptic-feedback';
+import playSound from '../../services/soundService'; // 1. Importar o serviço de som
 import Carta from './Carta';
 import { Card } from '../../types';
 import { useOrientation, Orientation } from '../../hooks/useOrientation';
@@ -75,10 +77,20 @@ const AnimatedHandCard: React.FC<{
   }, []);
 
   const gestureContext = useSharedValue({ x: 0, y: 0 });
+
+  // 1. Definir uma configuração de mola (spring) mais refinada
+  const springConfig = {
+    damping: 15,
+    stiffness: 120,
+    mass: 1,
+  };
+
   const gesture = Gesture.Pan()
     .onStart(() => {
+      runOnJS(HapticFeedback.trigger)('impactLight');
+      runOnJS(playSound)('SELECT');
       gestureContext.value = { x: translateX.value, y: translateY.value };
-      scale.value = withSpring(1.2);
+      scale.value = withSpring(1.2, springConfig);
       zIndex.value = withTiming(100);
       rotation.value = withTiming(0);
     })
@@ -88,13 +100,17 @@ const AnimatedHandCard: React.FC<{
     })
     .onEnd(() => {
       if (translateY.value < -height * 0.2) {
+        // A carta foi "jogada"
+        runOnJS(playSound)('PLAY');
         runOnJS(onSelectCard)(card);
+      } else {
+        // 2. Usar a nova configuração para um retorno suave à mão
+        translateX.value = withSpring(targetTranslateX, springConfig);
+        translateY.value = withSpring(targetTranslateY, springConfig);
+        scale.value = withSpring(1, springConfig);
+        zIndex.value = withTiming(index);
+        rotation.value = withSpring(targetRotation, springConfig);
       }
-      translateX.value = withSpring(targetTranslateX);
-      translateY.value = withSpring(targetTranslateY);
-      scale.value = withSpring(1);
-      zIndex.value = withTiming(index);
-      rotation.value = withSpring(targetRotation);
     })
     .enabled(!hasPlayedCard);
 
@@ -117,7 +133,7 @@ const AnimatedHandCard: React.FC<{
       <Animated.View style={[styles.cardWrapper, animatedStyle]}>
         <Carta
           card={card}
-          isRevealed={false} // <<<--- CORREÇÃO AQUI
+          isRevealed={true}
           isSelected={false}
           isSelectable={!hasPlayedCard}
           isAttributeSelectable={false}

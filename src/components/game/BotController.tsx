@@ -1,72 +1,59 @@
 // src/components/game/BotController.tsx
-
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { GameState, Card, Player } from '../../types';
-import { executeBotAction, getBotPlayers } from '../../services/botService';
+import { executeBotTurn } from '../../services/botService';
+import { selectBotMove } from '../../utils/botUtils';
 
 interface BotControllerProps {
   roomId: string;
-  gameState: GameState | null;
-  players: { [key: string]: Player } | null;
+  gameState: GameState;
+  players: { [key: string]: Player };
   allCards: Card[];
 }
 
-const BotController: React.FC<BotControllerProps> = ({
-  roomId,
-  gameState,
-  players,
-  allCards,
-}) => {
-  const processedActions = useRef<Set<string>>(new Set());
+const BotController: React.FC<BotControllerProps> = ({ roomId, gameState, players, allCards }) => {
+  const previousCurrentPlayer = useRef<string | null>(null);
 
-  const handleBotActions = useCallback(async () => {
-    if (!gameState || !players || !allCards.length) {
+  useEffect(() => {
+    // Evita rodar a lógica se o gameState não estiver pronto ou se a fase não for de seleção
+    if (!gameState || gameState.gamePhase !== 'selecting') {
+      previousCurrentPlayer.current = gameState?.currentPlayer || null;
       return;
     }
 
-    // Pega todos os bots ativos na sala
-    const bots = getBotPlayers(players).filter(p => p.status === 'active');
-    if (bots.length === 0) return;
-    
-    // Itera sobre cada bot para ver se ele precisa agir
-    for (const bot of bots) {
-      const botName = bot.nickname;
-      const actionKey = `${botName}-${gameState.currentRound}-${gameState.gamePhase}`;
+    // Roda apenas quando o turno muda para um novo jogador
+    if (gameState.currentPlayer !== previousCurrentPlayer.current) {
+      previousCurrentPlayer.current = gameState.currentPlayer;
 
-      if (processedActions.current.has(actionKey)) {
-        continue; // Ação já processada para este bot nesta fase/rodada
-      }
+      const currentPlayerInfo = players[gameState.currentPlayer];
+      
+      // Verifica se o jogador do turno atual é um bot
+      if (currentPlayerInfo && currentPlayerInfo.isBot) {
+        // Atraso para simular o bot "pensando"
+        const thinkTime = 1500 + Math.random() * 1000;
 
-      // Um bot precisa agir se:
-      // 1. A fase é 'selecting' e ele ainda não jogou.
-      // 2. A fase é 'revealing', é a vez dele e nenhum atributo foi escolhido ainda.
-      const needsToPlayCard = gameState.gamePhase === 'selecting' && !gameState.currentRoundCards[botName];
-      const needsToSelectAttribute = gameState.gamePhase === 'revealing' && gameState.currentPlayer === botName && !gameState.selectedAttribute;
-
-      if (needsToPlayCard || needsToSelectAttribute) {
-        console.log(`🤖 Bot ${botName} precisa agir na fase ${gameState.gamePhase}`);
-        processedActions.current.add(actionKey); // Marca como processado
-        
-        try {
-          await executeBotAction(roomId, botName, gameState, allCards);
-        } catch (error) {
-          console.error(`Erro na ação do bot ${botName}:`, error);
-          processedActions.current.delete(actionKey); // Permite tentar de novo em caso de erro
-        }
+        setTimeout(() => {
+          const botHandIds = gameState.playerCards[gameState.currentPlayer] || [];
+          const botHand = botHandIds.map(id => allCards.find(c => c.id === id)).filter(Boolean) as Card[];
+          
+          if (botHand.length > 0) {
+            // 1. Chamar a nova função de decisão inteligente
+            const move = selectBotMove(
+                botHand, 
+                gameState, 
+                allCards,
+                currentPlayerInfo.botDifficulty || 'medium' // Usa a dificuldade definida ou um padrão
+            );
+            
+            if (move) {
+              // 2. Executar o turno com a carta e o atributo escolhidos
+              executeBotTurn(roomId, gameState.currentPlayer, move.card, move.attribute);
+            }
+          }
+        }, thinkTime);
       }
     }
   }, [gameState, players, allCards, roomId]);
-
-  // Limpa as ações processadas quando uma nova rodada começa
-  useEffect(() => {
-    const firstAction = processedActions.current.values().next().value;
-    const currentRoundFromActions = firstAction ? parseInt(firstAction.split('-')[1], 10) : 0;
-    
-    if (gameState && gameState.currentRound !== currentRoundFromActions) {
-        processedActions.current.clear();
-    }
-    handleBotActions();
-  }, [gameState, handleBotActions]);
 
   return null; // Este componente não renderiza nada
 };

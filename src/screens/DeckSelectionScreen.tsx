@@ -9,12 +9,15 @@ import {
   TouchableOpacity,
   Alert,
   SafeAreaView,
+  ImageBackground, // 1. Importar ImageBackground
 } from 'react-native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList, Deck } from '../types';
 import { useGame } from '../contexts/GameContext';
 import BaralhoCard from '../components/common/BaralhoCard';
 import { getUserData } from '../services/storageService';
+import HapticFeedback from 'react-native-haptic-feedback';
+import playSound from '../services/soundService';
 
 type DeckSelectionNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -67,6 +70,8 @@ const DeckSelectionScreen: React.FC<Props> = ({ navigation }) => {
   }, [loadUserData]);
 
   const handleDeckSelect = (deck: Deck) => {
+    HapticFeedback.trigger('selection');
+    playSound('SELECT');
     setSelectedDeckId(deck.id);
     setSelectedDeck(deck);
   };
@@ -76,84 +81,97 @@ const DeckSelectionScreen: React.FC<Props> = ({ navigation }) => {
       Alert.alert('Atenção', 'Por favor, selecione um baralho para continuar.');
       return;
     }
+    HapticFeedback.trigger('impactMedium');
+    playSound('CLICK');
     navigation.navigate('Lobby');
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>🎴 Escolha seu Baralho</Text>
-        <Text style={styles.subtitle}>
-          Olá, {state.playerAvatar} {state.playerNickname}! Selecione um baralho:
-        </Text>
-      </View>
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}>
-        <View style={styles.decksContainer}>
-          {AVAILABLE_DECKS.map(deck => (
-            <BaralhoCard
-              key={deck.id}
-              deck={deck}
-              isSelected={selectedDeckId === deck.id}
-              onSelect={handleDeckSelect}
-            />
-          ))}
+    // 2. Usar o ImageBackground como container principal
+    <ImageBackground
+      source={require('../assets/images/table-background.png')}
+      style={styles.backgroundImage}>
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.title}>🎴 Escolha seu Baralho</Text>
+          <Text style={styles.subtitle}>
+            Olá, {state.playerAvatar} {state.playerNickname}! Selecione um baralho:
+          </Text>
         </View>
 
-        {state.selectedDeck && (
-          <View style={styles.selectedInfo}>
-            <Text style={styles.selectedTitle}>
-              Baralho Selecionado: {state.selectedDeck.name}
-            </Text>
-            <Text style={styles.selectedDescription}>
-              Categorias: {state.selectedDeck.categories.join(', ')}
-            </Text>
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}>
+          <View style={styles.decksContainer}>
+            {AVAILABLE_DECKS.map(deck => (
+              <BaralhoCard
+                key={deck.id}
+                deck={deck}
+                isSelected={selectedDeckId === deck.id}
+                onSelect={handleDeckSelect}
+              />
+            ))}
           </View>
-        )}
-      </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[
-            styles.button,
-            !state.selectedDeck && styles.buttonDisabled,
-          ]}
-          onPress={handleContinueToLobby}
-          disabled={!state.selectedDeck}>
-          <Text style={styles.buttonText}>
-            Continuar para o Lobby
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+          {state.selectedDeck && (
+            <View style={styles.selectedInfo}>
+              <Text style={styles.selectedTitle}>
+                Baralho Selecionado: {state.selectedDeck.name}
+              </Text>
+              <Text style={styles.selectedDescription}>
+                Categorias: {state.selectedDeck.categories.join(', ')}
+              </Text>
+            </View>
+          )}
+        </ScrollView>
+
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[
+              styles.button,
+              !state.selectedDeck && styles.buttonDisabled,
+            ]}
+            onPress={handleContinueToLobby}
+            disabled={!state.selectedDeck}>
+            <Text style={styles.buttonText}>
+              Continuar para o Lobby
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </ImageBackground>
   );
 };
 
+// 3. Ajustar os estilos para o novo layout
 const styles = StyleSheet.create({
+  backgroundImage: {
+    flex: 1,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: 'rgba(0,0,0,0.3)', // Overlay escuro para legibilidade
   },
   header: {
     paddingHorizontal: 24,
     paddingTop: 16,
     paddingBottom: 24,
-    backgroundColor: '#FFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: '#FFF',
     marginBottom: 8,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: -1, height: 1 },
+    textShadowRadius: 10
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#DDD',
+    textAlign: 'center',
     lineHeight: 22,
   },
   scrollView: {
@@ -168,7 +186,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   selectedInfo: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: 'rgba(227, 242, 253, 0.9)', // Ligeiramente transparente
     padding: 16,
     borderRadius: 12,
     marginTop: 16,
@@ -187,9 +205,7 @@ const styles = StyleSheet.create({
   },
   footer: {
     padding: 24,
-    backgroundColor: '#FFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    backgroundColor: 'transparent',
   },
   button: {
     height: 56,
@@ -197,9 +213,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#007AFF',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   buttonDisabled: {
-    backgroundColor: '#CCC',
+    backgroundColor: '#999',
   },
   buttonText: {
     fontSize: 18,

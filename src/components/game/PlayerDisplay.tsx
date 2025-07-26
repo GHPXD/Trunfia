@@ -1,6 +1,6 @@
 // src/components/game/PlayerDisplay.tsx
-import React from 'react';
-import { View, Text, StyleSheet, LayoutChangeEvent, ViewStyle, TextStyle } from 'react-native';
+import React from 'react'; // 1. Importar o React completo
+import { View, Text, StyleSheet, LayoutChangeEvent } from 'react-native';
 import OpponentHand from './OpponentHand';
 import { Player } from '../../types';
 import { useAnimationCoordinates } from '../../contexts/AnimationCoordinateContext';
@@ -11,21 +11,18 @@ type Position = 'top' | 'topLeft' | 'topRight' | 'left' | 'right';
 interface PlayerDisplayProps {
   player: Player;
   cardCount: number;
+  totalCards: number;
   position: Position;
   isCurrentPlayer: boolean;
   orientation: Orientation;
 }
 
-// <<<--- CORREÇÃO AQUI: Estilos posicionais separados ---<<<
 const positionStyles = StyleSheet.create({
-  // Estilos para Retrato (Portrait)
   top_PORTRAIT: { top: '15%', alignSelf: 'center' },
   topLeft_PORTRAIT: { top: '15%', left: 10 },
   topRight_PORTRAIT: { top: '15%', right: 10 },
   left_PORTRAIT: { top: '30%', left: 10 },
   right_PORTRAIT: { top: '30%', right: 10 },
-
-  // Estilos para Paisagem (Landscape)
   top_LANDSCAPE: { top: 10, alignSelf: 'center' },
   left_LANDSCAPE: { left: 20, top: '50%', transform: [{ translateY: -50 }] },
   right_LANDSCAPE: { right: 20, top: '50%', transform: [{ translateY: -50 }] },
@@ -33,8 +30,9 @@ const positionStyles = StyleSheet.create({
   topRight_LANDSCAPE: { top: 10, right: 20 },
 });
 
-const PlayerDisplay: React.FC<PlayerDisplayProps> = ({
-  player, cardCount, position, isCurrentPlayer, orientation,
+// 2. Definir o componente funcional como uma constante
+const PlayerDisplayComponent: React.FC<PlayerDisplayProps> = ({
+  player, cardCount, totalCards, position, isCurrentPlayer, orientation,
 }) => {
   const { setCoordinate } = useAnimationCoordinates();
 
@@ -52,6 +50,7 @@ const PlayerDisplay: React.FC<PlayerDisplayProps> = ({
   }
 
   const positionStyleKey = `${position}_${orientation}` as keyof typeof positionStyles;
+  const cardPercentage = totalCards > 0 ? (cardCount / totalCards) * 100 : 0;
 
   return (
     <View
@@ -63,6 +62,9 @@ const PlayerDisplay: React.FC<PlayerDisplayProps> = ({
         <Text style={styles.nickname} numberOfLines={1}>{player.nickname}</Text>
       </View>
       <OpponentHand cardCount={cardCount} />
+      <View style={styles.progressContainer}>
+          <View style={[styles.progressBar, { width: `${cardPercentage}%` }]} />
+      </View>
     </View>
   );
 };
@@ -73,6 +75,19 @@ const styles = StyleSheet.create({
   currentPlayerHighlight: { backgroundColor: '#FFD700' },
   avatar: { fontSize: 24 },
   nickname: { color: '#FFF', fontWeight: 'bold', fontSize: 12, },
+  progressContainer: {
+    height: 6,
+    width: '80%',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    borderRadius: 3,
+    marginTop: 4,
+  },
+  progressBar: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 3,
+  },
 });
 
-export default PlayerDisplay;
+// 3. Exportar a versão memoizada do componente
+export default React.memo(PlayerDisplayComponent);

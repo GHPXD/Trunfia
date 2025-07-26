@@ -4,6 +4,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Dimensions, Image } from 'rea
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { Card } from '../../types';
 import { formatAttributeValue } from '../../utils/gameUtils';
+import CachedImage from '../common/CachedImage'; // 1. Importar o novo componente
 
 interface CartaProps {
   card: Card;
@@ -20,7 +21,7 @@ const { width } = Dimensions.get('window');
 const CARD_WIDTH = Math.min(width * 0.45, 200);
 const CARD_HEIGHT = CARD_WIDTH * 1.5;
 
-const Carta: React.FC<CartaProps> = ({
+const CartaComponent: React.FC<CartaProps> = ({
   card,
   isRevealed,
   isSelected,
@@ -34,7 +35,7 @@ const Carta: React.FC<CartaProps> = ({
 
   useEffect(() => {
     rotate.value = withTiming(isRevealed ? 180 : 0, { duration: 400 });
-  }, [isRevealed]);
+  }, [isRevealed, rotate]);
 
   const handlePress = () => {
     if (isSelectable && onSelect) {
@@ -42,12 +43,10 @@ const Carta: React.FC<CartaProps> = ({
     }
   };
 
-  // Animação para o lado que começa visível (o verso)
   const frontAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotateY: `${rotate.value}deg` }],
   }));
 
-  // Animação para o lado que começa escondido (a frente)
   const backAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ rotateY: `${rotate.value + 180}deg` }],
   }));
@@ -62,21 +61,17 @@ const Carta: React.FC<CartaProps> = ({
       disabled={!isSelectable && !isAttributeSelectable}
       activeOpacity={0.9}
     >
-      {/* CORREÇÃO: Invertemos os estilos aplicados.
-        O verso da carta (cardBack) agora usa o frontAnimatedStyle para começar em 0 graus (visível).
-        A frente da carta (cardFront) usa o backAnimatedStyle para começar em 180 graus (escondida).
-      */}
       <Animated.View style={[styles.cardBase, styles.cardBack, frontAnimatedStyle]}>
         <Image source={require('../../assets/images/logo-verso.png')} style={styles.backImage} />
       </Animated.View>
 
       <Animated.View style={[styles.cardBase, styles.cardFront, backAnimatedStyle]}>
         <View style={styles.imageContainer}>
+          {/* 2. Substituir o Image pelo CachedImage */}
           {card.image ? (
-            <Image
-              source={{ uri: card.image }}
+            <CachedImage
+              uri={card.image}
               style={styles.cardImage}
-              resizeMode="cover"
             />
           ) : (
             <Text style={styles.imagePlaceholder}>{card.name}</Text>
@@ -209,4 +204,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Carta;
+export default React.memo(CartaComponent);

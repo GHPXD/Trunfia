@@ -1,6 +1,6 @@
 // src/components/game/ArenaCard.tsx
 import React, { useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Dimensions, LayoutRectangle } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -13,6 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Card } from '../../types';
 import Carta from './Carta';
+import { useAnimationCoordinates } from '../../contexts/AnimationCoordinateContext';
 
 interface ArenaCardProps {
   card: Card;
@@ -22,6 +23,7 @@ interface ArenaCardProps {
   onAnimationComplete: () => void;
   index: number;
   totalCards: number;
+  winnerNickname: string | null; // 1. Receber o nickname do vencedor
 }
 
 const ArenaCard: React.FC<ArenaCardProps> = ({
@@ -31,28 +33,28 @@ const ArenaCard: React.FC<ArenaCardProps> = ({
   isRoundEnding,
   onAnimationComplete,
   index,
-  totalCards
+  totalCards,
+  winnerNickname, // 2. Usar o nickname do vencedor
 }) => {
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
   const translateY = useSharedValue(0);
+  const translateX = useSharedValue(0); // 3. Adicionar translateX
 
-  // Animação de entrada da carta
+  const { coordinates } = useAnimationCoordinates(); // 4. Obter o mapa de coordenadas
+
   useEffect(() => {
-    // Reseta para o estado inicial para re-animar em novas rodadas
     scale.value = 0.5;
     opacity.value = 0;
     translateY.value = 0;
+    translateX.value = 0;
     
-    // Anima a entrada
     scale.value = withSpring(1, { damping: 12, stiffness: 100 });
     opacity.value = withSpring(1);
-  }, [card.id]); // A `key` no componente pai já garante a recriação, mas isso adiciona robustez
+  }, [card.id, scale, opacity, translateY, translateX]);
 
-  // Animação de fim de rodada
   useEffect(() => {
     if (isRoundEnding) {
-      // 1. Destaque da carta vencedora
       if (isWinner) {
         scale.value = withSequence(
           withDelay(200, withTiming(1.15, { duration: 300 })),
@@ -60,31 +62,58 @@ const ArenaCard: React.FC<ArenaCardProps> = ({
         );
       }
 
-      // 2. Animação de coleta (voar para baixo)
-      translateY.value = withDelay(1200, withTiming(800, {
-        duration: 500,
-        easing: Easing.inOut(Easing.ease)
-      }));
+      // 5. Nova lógica de animação para a coleta de cartas
+      const winnerLayout = winnerNickname ? coordinates[winnerNickname] : null;
+
+      if (winnerLayout) {
+        // Pega a posição central da tela
+        const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+        const screenCenterX = screenWidth / 2;
+        const screenCenterY = screenHeight / 2;
+
+        // Calcula o destino final (posição do vencedor) relativo ao centro
+        const destinationX = winnerLayout.x + (winnerLayout.width / 2) - screenCenterX;
+        const destinationY = winnerLayout.y + (winnerLayout.height / 2) - screenCenterY;
+        
+        translateX.value = withDelay(1200 + index * 50, withTiming(destinationX, {
+          duration: 500,
+          easing: Easing.inOut(Easing.ease)
+        }));
+        translateY.value = withDelay(1200 + index * 50, withTiming(destinationY, {
+          duration: 500,
+          easing: Easing.inOut(Easing.ease)
+        }));
+        scale.value = withDelay(1200 + index * 50, withTiming(0.2, { duration: 500 }));
+        opacity.value = withDelay(1700 + index * 50, withTiming(0)); // Fade out ao chegar
+      } else {
+        // Fallback: animação antiga se o layout do vencedor não for encontrado
+        translateY.value = withDelay(1200, withTiming(800, {
+          duration: 500,
+          easing: Easing.inOut(Easing.ease)
+        }));
+      }
       
-      // 3. Apenas a última carta sinaliza o fim da animação para evitar múltiplas chamadas
       if (index === totalCards - 1) {
         setTimeout(() => {
             runOnJS(onAnimationComplete)();
-        }, 1800); // (1200ms de delay) + (500ms de animação) + (100ms de margem)
+        }, 1800 + totalCards * 50); // Ajusta o tempo para a última carta terminar
       }
     }
-  }, [isRoundEnding]);
+  }, [isRoundEnding, isWinner, scale, translateY, translateX, opacity, index, totalCards, onAnimationComplete, coordinates, winnerNickname]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
         { scale: scale.value },
-        { translateY: translateY.value }
     ],
+    // 6. Adicionar zIndex para que a carta vencedora fique por cima
+    zIndex: isWinner ? 10 : 1,
   }));
 
   return (
-    <Animated.View style={animatedStyle}>
+    <Animated.View style={[styles.cardContainer, animatedStyle]}>
       <View style={[isWinner && isRoundEnding && styles.winnerHighlight]}>
         <Carta
           card={card}
@@ -99,6 +128,9 @@ const ArenaCard: React.FC<ArenaCardProps> = ({
 };
 
 const styles = StyleSheet.create({
+  cardContainer: {
+    // 7. Remover position absolute para que o layout do Arena funcione corretamente
+  },
   winnerHighlight: {
     shadowColor: '#FFD700',
     shadowOpacity: 1,
@@ -108,4 +140,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ArenaCard;
+export default React.memo(ArenaCard);

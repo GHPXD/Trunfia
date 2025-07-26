@@ -1,188 +1,65 @@
 // src/services/botService.ts
 
-import { ref, update, get } from 'firebase/database';
+import { ref, update, get, remove } from 'firebase/database';
 import { database } from '../config/firebase';
-import { Player, GameState, Card } from '../types';
-import { generateBotName, selectBestCard, getBotThinkingTime } from '../utils/botUtils';
+import { Card, Player } from '../types';
+import { EMOJI_AVATARS } from '../constants';
 import { playCard, selectAttribute } from './gameService';
 
-/**
- * Adiciona um bot à sala
- */
-export const addBotToRoom = async (roomId: string): Promise<string> => {
-  try {
-    const roomRef = ref(database, `rooms/${roomId}`);
-    const roomSnapshot = await get(roomRef);
-    
-    if (!roomSnapshot.exists()) {
-      throw new Error('Sala não encontrada');
-    }
+const ROOMS_PATH = 'rooms';
 
-    const roomData = roomSnapshot.val();
-    const currentPlayers = roomData.players || {};
-    const playerCount = Object.keys(currentPlayers).length;
-
-    if (playerCount >= (roomData.maxPlayers || 4)) {
-      throw new Error('Sala lotada');
-    }
-
-    const existingPlayerNames = Object.keys(currentPlayers);
-    const botName = generateBotName(existingPlayerNames);
-
-    const botPlayer: Player = {
-      nickname: botName,
-      isHost: false,
-      joinedAt: new Date().toISOString(),
-      isReady: true,
-      isBot: true,
-      // Dificuldade removida, agora é o comportamento padrão
-      botDifficulty: 'medium', 
-      status: 'active',
-    };
-
-    const updates = {
-      [`rooms/${roomId}/players/${botName}`]: botPlayer,
-      [`rooms/${roomId}/lastActivity`]: new Date().toISOString(),
-    };
-
-    await update(ref(database), updates);
-    return botName;
-  } catch (error) {
-    console.error('Erro ao adicionar bot:', error);
-    throw error;
-  }
+// Gera um nome de bot único
+const generateBotName = (): string => {
+  const adjectives = ['Rápido', 'Astuto', 'Sábio', 'Corajoso', 'Furtivo'];
+  const nouns = ['Lobo', 'Falcão', 'Robô', 'Ninja', 'Mago'];
+  return `${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}${Math.floor(Math.random() * 100)}`;
 };
 
-/**
- * Remove um bot da sala
- */
-export const removeBotFromRoom = async (roomId: string, botName: string): Promise<void> => {
-  try {
-    const playerRef = ref(database, `rooms/${roomId}/players/${botName}`);
-    const playerSnapshot = await get(playerRef);
-    
-    if (!playerSnapshot.exists()) {
-      throw new Error('Jogador não encontrado');
-    }
-
-    const playerData = playerSnapshot.val();
-    if (!playerData.isBot) {
-      throw new Error('Não é possível remover jogadores humanos');
-    }
-
-    const updates = {
-      [`rooms/${roomId}/players/${botName}`]: null,
-      [`rooms/${roomId}/lastActivity`]: new Date().toISOString(),
-    };
-
-    await update(ref(database), updates);
-  } catch (error) {
-    console.error('Erro ao remover bot:', error);
-    throw error;
-  }
-};
-
-/**
- * Executa ação do bot baseada no estado atual do jogo
- */
-export const executeBotAction = async (
-  roomId: string,
-  botName: string,
-  gameState: GameState,
-  allCards: Card[]
-): Promise<void> => {
-  try {
-    const playerRef = ref(database, `rooms/${roomId}/players/${botName}`);
-    const playerSnapshot = await get(playerRef);
-    if (!playerSnapshot.exists()) return;
-    const botData = playerSnapshot.val();
-    if (!botData.isBot || botData.status === 'eliminated') return;
-
-    // A dificuldade agora é padrão, mas a lógica de tempo pode permanecer
-    const thinkingTime = getBotThinkingTime('medium'); 
-    
-    await new Promise(resolve => setTimeout(resolve, thinkingTime));
-
-    if (gameState.gamePhase === 'selecting' && !gameState.currentRoundCards[botName]) {
-      await handleBotCardSelection(roomId, botName, gameState, allCards);
-    }
-    
-    if (gameState.gamePhase === 'revealing' && gameState.currentPlayer === botName && !gameState.selectedAttribute) {
-      await handleBotAttributeSelection(roomId, botName, gameState, allCards);
-    }
-
-  } catch (error) {
-    console.error(`Erro na ação do bot ${botName}:`, error);
-  }
-};
-
-/**
- * Bot seleciona uma carta para jogar
- */
-const handleBotCardSelection = async (
-  roomId: string,
-  botName: string,
-  gameState: GameState,
-  allCards: Card[]
-): Promise<void> => {
-  try {
-    const botCards = gameState.playerCards[botName] || [];
-    if (botCards.length === 0) return;
-
-    // A dificuldade é omitida, usando a lógica padrão (aleatória) de selectBestCard
-    const decision = selectBestCard(botCards, allCards);
-    console.log(`🤖 Bot ${botName} selecionou carta ${decision.selectedCardId} - ${decision.reasoning}`);
-    await playCard(roomId, botName, decision.selectedCardId);
-  } catch (error) {
-    console.error(`Erro na seleção de carta do bot ${botName}:`, error);
-  }
-};
-
-/**
- * Bot seleciona atributo (apenas se for o jogador da vez)
- */
-const handleBotAttributeSelection = async (
-  roomId: string,
-  botName: string,
-  gameState: GameState,
-  allCards: Card[],
-): Promise<void> => {
-  try {
-    const botCardId = gameState.currentRoundCards?.[botName];
-    if (!botCardId) return;
-
-    const botCard = allCards.find(card => card.id === botCardId);
-    if (!botCard) return;
-
-    // A lógica para escolher o melhor atributo já está correta
-    let bestAttribute = '';
-    let bestValue = -1;
-    
-    Object.entries(botCard.attributes).forEach(([attribute, value]) => {
-      if (value > bestValue) {
-        bestValue = value;
-        bestAttribute = attribute;
-      }
-    });
-    const selectedAttribute = bestAttribute;
-
-    console.log(`🤖 Bot ${botName} selecionou o melhor atributo: ${selectedAttribute}`);
-    await selectAttribute(roomId, selectedAttribute);
-  } catch (error) {
-    console.error(`Erro na seleção de atributo do bot ${botName}:`, error);
-  }
-};
-
-/**
- * Lista todos os bots em uma sala
- */
 export const getBotPlayers = (players: { [key: string]: Player }): Player[] => {
-  return Object.values(players).filter(player => player.isBot);
+  return Object.values(players).filter(p => p.isBot);
 };
 
-/**
- * Verifica se um jogador é um bot
- */
-export const isBot = (player: Player): boolean => {
-  return player.isBot === true;
+export const addBotToRoom = async (roomId: string): Promise<string> => {
+  const roomRef = ref(database, `${ROOMS_PATH}/${roomId}`);
+  const snapshot = await get(roomRef);
+  if (!snapshot.exists()) {
+    throw new Error('Sala não encontrada para adicionar bot.');
+  }
+
+  const botName = generateBotName();
+  const botAvatar = EMOJI_AVATARS[Math.floor(Math.random() * EMOJI_AVATARS.length)];
+  const newBot: Player = {
+    nickname: botName,
+    avatar: botAvatar,
+    isHost: false,
+    joinedAt: new Date().toISOString(),
+    isReady: true, // Bots estão sempre prontos
+    isBot: true,
+    botDifficulty: 'medium',
+    status: 'active',
+  };
+
+  await update(ref(database, `${ROOMS_PATH}/${roomId}/players`), {
+    [botName]: newBot,
+  });
+  return botName;
+};
+
+export const removeBotFromRoom = async (roomId: string, botName: string): Promise<void> => {
+  const botRef = ref(database, `${ROOMS_PATH}/${roomId}/players/${botName}`);
+  await remove(botRef);
+};
+
+// Ação de um bot para jogar uma carta (se for o jogador atual)
+export const executeBotTurn = async (
+  roomId: string,
+  botNickname: string,
+  card: Card,
+  attribute: string
+): Promise<void> => {
+  const updates = {
+    [`${ROOMS_PATH}/${roomId}/gameState/currentRoundCards/${botNickname}`]: card.id,
+    [`${ROOMS_PATH}/${roomId}/gameState/selectedAttribute`]: attribute,
+  };
+  await update(ref(database), updates);
 };

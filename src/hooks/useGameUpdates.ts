@@ -5,8 +5,8 @@ import { GameState, Card, Room, RootStackParamList } from '../types';
 import { processRoundResult, startNextRound } from '../services/gameService';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
+import playSound from '../services/soundService';
 
-// Hook customizado para obter o valor anterior
 function usePrevious(value: GameState | null) {
   const ref = useRef<GameState | null>(null);
   useEffect(() => {
@@ -43,18 +43,16 @@ export const useGameUpdates = ({
   const isHost = currentRoom?.hostNickname === playerNickname;
 
   const handleNextRound = useCallback(async () => {
-    // Apenas o host pode iniciar a próxima rodada para evitar múltiplas chamadas
-    if (!isHost) return;
+    if (!isHost || !gameState) return;
     try {
-      await startNextRound(roomId);
+      await startNextRound(roomId, gameState); // Passando o gameState atual
     } catch (error) {
       Alert.alert('Erro', 'Não foi possível iniciar a próxima rodada.');
     }
-  }, [roomId, isHost]);
+  }, [roomId, isHost, gameState]);
 
   const onAnimationComplete = useCallback(() => {
     setIsRoundEnding(false);
-    // Após a animação, o cliente do host inicia a próxima rodada
     if (isHost) {
       handleNextRound();
     }
@@ -63,12 +61,10 @@ export const useGameUpdates = ({
   useEffect(() => {
     if (!gameState || !prevGameState || !currentRoom) return;
 
-    // Reseta a mão quando uma nova rodada começa
     if (gameState.gamePhase === 'selecting' && prevGameState.gamePhase !== 'selecting') {
       resetHandState();
     }
 
-    // Anima a carta do oponente quando ela é jogada
     if (gameState.currentRoundCards) {
       const prevCards = Object.keys(prevGameState?.currentRoundCards || {});
       const currentCards = Object.keys(gameState.currentRoundCards);
@@ -77,6 +73,7 @@ export const useGameUpdates = ({
       );
 
       if (newPlayerCard) {
+        playSound('PLAY');
         const cardId = gameState.currentRoundCards[newPlayerCard];
         const card = allCards.find(c => c.id === cardId);
         if (card) {
@@ -85,10 +82,9 @@ export const useGameUpdates = ({
       }
     }
 
-    // Processa o resultado da rodada
     if (gameState.gamePhase === 'revealing' && !isProcessingRound.current) {
       const activePlayersCount = Object.values(currentRoom.players).filter(
-        p => p.status === 'active'
+        p => p.status !== 'eliminated'
       ).length;
 
       if (
@@ -104,8 +100,15 @@ export const useGameUpdates = ({
       }
     }
 
-    // Lida com o fim da rodada e do jogo
     if (gameState.gamePhase === 'comparing' && !isRoundEnding) {
+      if (gameState.roundWinner) {
+        if (gameState.roundWinner === playerNickname) {
+          playSound('WIN');
+        } else {
+          playSound('LOSE');
+        }
+      }
+
       if (gameState.gameWinner) {
         Alert.alert(
           'Fim de Jogo!',

@@ -1,134 +1,89 @@
 // src/utils/botUtils.ts
-
-import { Card, BotDecision } from '../types';
-
-/**
- * Gera nomes aleatórios para bots
- */
-const BOT_NAMES = [
-  'Boteco do Alphinha',     // Sempre no bar, nunca no código 🍻
-  'Betadinho Nervoso',      // Vive em beta e surtando 😬
-  'Gamagrelado',            // Magrelo e bugado 🦴
-  'Deltarado',              // Fala cada bobagem... 🤪
-  'Sigmãe',                 // Lidera, mas com carinho ❤️
-  'Omega 3',                // O único saudável do grupo 🐟
-  'Bot Primeira Dose',      // Só funciona depois da vacina 💉
-  'NeoCóptero',             // Vive voando, nunca no chão 🚁
-  'Zezeta do Grau',         // Dá grau até no terminal 🏍️
-  'Kappacete',              // Vive caindo, mas usa capacete 🪖
-  'Lambdinha do Grau',      // Curte matemática e rolezera 🤓
-  'Tetinha 3000'            // Ícone, lenda, patrimônio nacional 🐄
-];
-
-export const generateBotName = (existingPlayers: string[]): string => {
-  const availableNames = BOT_NAMES.filter(name => !existingPlayers.includes(name));
-
-  if (availableNames.length === 0) {
-    let counter = 1;
-    let botName = `Bot ${counter}`;
-    while (existingPlayers.includes(botName)) {
-      counter++;
-      botName = `Bot ${counter}`;
-    }
-    return botName;
-  }
-
-  const randomIndex = Math.floor(Math.random() * availableNames.length);
-  return availableNames[randomIndex];
-};
+import { Card, GameState, BotDifficulty } from '../types';
 
 /**
- * Encontra o melhor atributo de uma carta (maior valor)
+ * Calcula a "força" de um atributo.
+ * A força é a porcentagem de cartas restantes no jogo que este valor venceria.
+ * @param attributeValue O valor do atributo a ser testado.
+ * @param attributeName O nome do atributo (para checar regras especiais como 'Fundação').
+ * @param remainingCards O conjunto de todas as cartas ainda em jogo.
+ * @returns Uma pontuação de 0 a 1 representando a chance de vitória.
  */
-export const findBestAttribute = (card: Card): { attribute: string; value: number } => {
-  let bestAttribute = '';
-  let bestValue = -Infinity;
+const calculateAttributeStrength = (
+  attributeValue: number,
+  attributeName: string,
+  remainingCards: Card[]
+): number => {
+  if (remainingCards.length === 0) return 1; // Se não houver outras cartas, ele sempre vence.
 
-  Object.entries(card.attributes).forEach(([attribute, value]) => {
-    // Exceção para o atributo 'Fundação', onde menor é melhor.
-    const isLowerBetter = attribute === 'Fundação';
-    if (isLowerBetter) {
-      // Temporariamente não implementado para manter a lógica simples,
-      // mas aqui seria o local para uma estratégia diferente.
-      // Por enquanto, o bot não será especialista em 'Fundação'.
-    }
+  const lowerIsBetter = attributeName === 'Fundação';
+  let cardsBeaten = 0;
 
-    if (value > bestValue) {
-      bestValue = value;
-      bestAttribute = attribute;
+  remainingCards.forEach(card => {
+    const opponentValue = card.attributes[attributeName];
+    if (opponentValue === undefined) return;
+
+    if (lowerIsBetter) {
+      if (attributeValue < opponentValue) {
+        cardsBeaten++;
+      }
+    } else {
+      if (attributeValue > opponentValue) {
+        cardsBeaten++;
+      }
     }
   });
 
-  return { attribute: bestAttribute, value: bestValue };
+  return cardsBeaten / remainingCards.length;
 };
 
 /**
- * Estratégia de seleção para bots (MELHORADA).
+ * O bot seleciona o melhor movimento possível com base no estado atual do jogo.
+ * @param botHand A mão atual do bot.
+ * @param gameState O estado completo do jogo.
+ * @param allCards Todas as cartas do baralho.
+ * @param difficulty A dificuldade do bot (ainda não implementado, mas preparado para o futuro).
+ * @returns A carta e o atributo escolhidos.
  */
-export const selectBestCard = (
-  playerCards: string[],
-  allCards: Card[]
-): BotDecision => {
-  const availableCards = playerCards
-    .map(cardId => allCards.find(card => card.id === cardId))
-    .filter(Boolean) as Card[];
+export const selectBotMove = (
+  botHand: Card[],
+  gameState: GameState,
+  allCards: Card[],
+  difficulty: BotDifficulty
+): { card: Card; attribute: string } | null => {
+  if (botHand.length === 0) return null;
 
-  if (availableCards.length === 0) {
-    throw new Error('Nenhuma carta disponível para o bot');
-  }
-
-  let bestCardOverall: Card | null = null;
-  let bestAttributeOverall = { attribute: '', value: -Infinity };
+  // 1. Descobrir quais cartas ainda estão em jogo (não estão na mão do bot)
+  const botHandIds = new Set(botHand.map(c => c.id));
+  const allPlayerCardIds = new Set(Object.values(gameState.playerCards).flat());
   
-  // Itera sobre todas as cartas para encontrar a melhor jogada possível
-  for (const card of availableCards) {
-    const cardBestAttribute = findBestAttribute(card);
-    if (cardBestAttribute.value > bestAttributeOverall.value) {
-      bestAttributeOverall = cardBestAttribute;
-      bestCardOverall = card;
-    }
-  }
+  const remainingCardsInPlay = allCards.filter(
+    card => allPlayerCardIds.has(card.id) && !botHandIds.has(card.id)
+  );
 
-  if (!bestCardOverall) {
-      // Fallback para o caso de nenhuma carta ser encontrada (improvável)
-      bestCardOverall = availableCards[0];
-      bestAttributeOverall = findBestAttribute(bestCardOverall);
-  }
-
-  const reasoning = `Analisou ${availableCards.length} cartas e escolheu '${bestCardOverall.name}' por causa do seu melhor atributo: '${bestAttributeOverall.attribute}'.`;
-  const confidence = 0.95; // Confiança maior, pois a decisão é baseada em dados
-
-  return {
-    selectedCardId: bestCardOverall.id,
-    selectedAttribute: bestAttributeOverall.attribute,
-    confidence,
-    reasoning,
+  let bestMove = {
+    card: botHand[0],
+    attribute: Object.keys(botHand[0].attributes)[0],
+    maxStrength: -1,
   };
-};
 
-/**
- * Calcula tempo de "pensamento" do bot.
- */
-export const getBotThinkingTime = (): number => {
-  return Math.random() * 1500 + 1000; // 1-2.5s
-};
+  // 2. Iterar sobre cada carta na mão do bot
+  botHand.forEach(card => {
+    // 3. Para cada carta, iterar sobre seus atributos
+    Object.entries(card.attributes).forEach(([attribute, value]) => {
+      // 4. Calcular a força de cada atributo contra as cartas restantes
+      const strength = calculateAttributeStrength(value, attribute, remainingCardsInPlay);
+      
+      // 5. Se esta jogada for mais forte que a melhor encontrada até agora, atualiza
+      if (strength > bestMove.maxStrength) {
+        bestMove = {
+          card: card,
+          attribute: attribute,
+          maxStrength: strength,
+        };
+      }
+    });
+  });
 
-/**
- * Gera mensagem de chat ocasional para bots (opcional)
- */
-const BOT_MESSAGES = [
-  'Boa jogada!',
-  'Interessante...',
-  'Vamos ver...',
-  'Essa foi difícil!',
-  'Parabéns!',
-  'Próxima rodada!',
-];
-
-export const generateBotChatMessage = (): string | null => {
-  if (Math.random() < 0.2) {
-    const randomIndex = Math.floor(Math.random() * BOT_MESSAGES.length);
-    return BOT_MESSAGES[randomIndex];
-  }
-  return null;
+  return { card: bestMove.card, attribute: bestMove.attribute };
 };

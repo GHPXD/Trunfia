@@ -3,7 +3,6 @@ import { Dimensions } from 'react-native';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-// Cores padrão da aplicação
 export const COLORS = {
   primary: '#007AFF',
   primaryLight: '#E3F2FD',
@@ -18,7 +17,6 @@ export const COLORS = {
   darkGray: '#333',
   text: '#333',
   textLight: '#666',
-  // Cores específicas de componentes
   timer: {
     success: '#5cb85c',
     warning: '#f0ad4e',
@@ -31,8 +29,24 @@ export const COLORS = {
   },
 };
 
-// Configurações da tela de Login
-export const AVATARS = ['😊', '😎', '😂', '🥳', '🤯', '👽', '🦊', '👻'];
+export const EMOJI_AVATARS: string[] = ['🧑‍🚀', '🧑‍🎨', '🧑‍💻', '🧑‍🔬', '🧑‍✈️', '🕵️'];
+
+// 2. Definir a nova lista de avatares de personagens
+export const CHARACTER_AVATARS = [
+  { id: 'char1', source: require('./assets/avatars/char1.png') },
+  { id: 'char2', source: require('./assets/avatars/char2.png') },
+  { id: 'char3', source: require('./assets/avatars/char3.png') },
+  { id: 'char4', source: require('./assets/avatars/char4.png') },
+  { id: 'char5', source: require('./assets/avatars/char5.png') },
+  { id: 'char6', source: require('./assets/avatars/char6.png') },
+];
+
+// 3. Criar uma função helper para obter a imagem de um avatar pelo ID
+export const getAvatarSourceById = (avatarId: string | null) => {
+  if (!avatarId) return null;
+  const foundAvatar = CHARACTER_AVATARS.find(avatar => avatar.id === avatarId);
+  return foundAvatar ? foundAvatar.source : null;
+};
 
 // Configurações da Roleta de Sorteio
 export const WHEEL_CONFIG = {

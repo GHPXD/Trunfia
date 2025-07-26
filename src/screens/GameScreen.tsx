@@ -1,11 +1,22 @@
 // src/screens/GameScreen.tsx
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert, ActivityIndicator, ImageBackground, Dimensions, LayoutRectangle } from 'react-native';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  ImageBackground,
+  Dimensions,
+  LayoutRectangle,
+} from 'react-native';
 import { RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import Animated, { useSharedValue, withTiming, Easing, runOnJS, useAnimatedStyle, withDelay } from 'react-native-reanimated';
 import Orientation from 'react-native-orientation-locker';
-import { RootStackParamList, GameState, Card } from '../types';
+import { RootStackParamList, GameState, Card, Player, RoundResult } from '../types';
 import { useGame } from '../contexts/GameContext';
 import { useAnimationCoordinates } from '../contexts/AnimationCoordinateContext';
 import { useOrientation, Orientation as OrientationType } from '../hooks/useOrientation';
@@ -19,20 +30,20 @@ import PlayerDisplay from '../components/game/PlayerDisplay';
 import Arena from '../components/game/Arena';
 import AnimatedHand from '../components/game/AnimatedHand';
 import Carta from '../components/game/Carta';
-import { usePlayerHand } from '../hooks/usePlayerHand'; // NOVO
-import { useGameUpdates } from '../hooks/useGameUpdates'; // NOVO
+import TurnIndicator from '../components/game/TurnIndicator';
+import ResultadoModal from '../components/game/ResultadoModal';
+import { usePlayerHand } from '../hooks/usePlayerHand';
+import { useGameUpdates } from '../hooks/useGameUpdates';
+import { useSinglePlayerGame } from '../hooks/useSinglePlayerGame';
 
-// Componente para a "carta fantasma" que voa da mão do oponente para a arena
-const OpponentCardAnimation: React.FC<{ card: Card, startPos: LayoutRectangle, onAnimationComplete: () => void }> = ({ card, startPos, onAnimationComplete }) => {
+const OpponentCardAnimation: React.FC<{ card: Card; startPos: LayoutRectangle; onAnimationComplete: () => void }> = ({ card, startPos, onAnimationComplete }) => {
   const { width, height } = Dimensions.get('window');
   const adjustedStartX = startPos.x + startPos.width / 2;
   const adjustedStartY = startPos.y + startPos.height / 2;
-
   const translateX = useSharedValue(adjustedStartX - width / 2);
   const translateY = useSharedValue(adjustedStartY - height / 2);
   const scale = useSharedValue(0.5);
   const opacity = useSharedValue(0);
-
   useEffect(() => {
     opacity.value = withTiming(1, { duration: 100 });
     scale.value = withDelay(50, withTiming(1, { duration: 450 }));
@@ -43,12 +54,10 @@ const OpponentCardAnimation: React.FC<{ card: Card, startPos: LayoutRectangle, o
       }
     }));
   }, [card, startPos, opacity, scale, translateX, translateY, onAnimationComplete]);
-
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
     transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],
   }));
-
   return (
     <Animated.View style={[StyleSheet.absoluteFill, styles.centerContent]} pointerEvents="none">
       <Carta card={card} isRevealed={false} isSelected={false} isSelectable={false} />
@@ -65,111 +74,135 @@ interface Props {
 }
 
 const GameScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { roomId } = route.params;
-  const { state } = useGame();
-  const { coordinates } = useAnimationCoordinates();
+  const { roomId, gameMode = 'multiplayer', botDifficulty = 'medium' } = route.params;
+  const isSinglePlayer = gameMode === 'singleplayer';
+
+  const { state: globalState } = useGame();
+  const { coordinates, setCoordinate } = useAnimationCoordinates();
   const orientation = useOrientation();
 
-  // Configuração de orientação da tela
-  useEffect(() => {
-    const lockOrientation = async () => {
-      try {
-        const setting = await getOrientationSetting();
-        if (setting === 'portrait') {
-          Orientation.lockToPortrait();
-        } else if (setting === 'landscape') {
-          Orientation.lockToLandscape();
-        } else {
-          Orientation.unlockAllOrientations();
-        }
-      } catch (e) {
-        console.error('Falha ao travar a orientação:', e);
-      }
-    };
-    lockOrientation();
-    return () => Orientation.unlockAllOrientations();
-  }, []);
+  const singlePlayerData = useSinglePlayerGame(isSinglePlayer ? globalState.selectedDeck?.id || 'paises' : 'paises', botDifficulty);
+  const [multiplayerGameState, setMultiplayerGameState] = useState<GameState | null>(null);
 
-  const [gameState, setGameState] = useState<GameState | null>(null);
+  const gameState = isSinglePlayer ? singlePlayerData.gameState : multiplayerGameState;
   const [allCards, setAllCards] = useState<Card[]>([]);
+  
+  useEffect(() => {
+    if (globalState.selectedDeck) {
+      setAllCards(getDeckCards(globalState.selectedDeck.id));
+    }
+  }, [globalState.selectedDeck]);
+
   const [playerHand, setPlayerHand] = useState<Card[]>([]);
+  const playerHandLayoutRef = useRef<LayoutRectangle | null>(null);
+  const [showResultModal, setShowResultModal] = useState(false);
 
-  const isCurrentPlayer = gameState?.currentPlayer === state.playerNickname;
-  const hasPlayedCard = !!(gameState?.currentRoundCards && gameState?.currentRoundCards[state.playerNickname]);
+  const isCurrentPlayer = gameState?.currentPlayer === globalState.playerNickname;
+  const hasPlayedCard = !!(gameState?.currentRoundCards && gameState?.currentRoundCards[globalState.playerNickname]);
 
-  // Usando os novos hooks para gerenciar a lógica
   const {
     cardToConfirm,
     tentativeAttribute,
     setTentativeAttribute,
     handleCardSelection,
-    handleConfirmTurn,
     resetHandState,
-  } = usePlayerHand({ roomId, playerNickname: state.playerNickname, isCurrentPlayer, hasPlayedCard });
+  } = usePlayerHand({
+    roomId,
+    playerNickname: globalState.playerNickname,
+    isCurrentPlayer,
+    hasPlayedCard,
+  });
 
   const {
-    isRoundEnding,
+    isRoundEnding: isMultiplayerRoundEnding,
     animatingOpponentCard,
-    onAnimationComplete,
+    onAnimationComplete: onMultiplayerAnimationComplete,
     clearAnimatingOpponentCard,
-  } = useGameUpdates({ gameState, roomId, playerNickname: state.playerNickname, allCards, currentRoom: state.currentRoom, resetHandState });
+  } = useGameUpdates({
+    gameState: multiplayerGameState,
+    roomId,
+    playerNickname: globalState.playerNickname,
+    allCards,
+    currentRoom: globalState.currentRoom,
+    resetHandState,
+  });
 
-  // Busca as cartas do baralho selecionado
   useEffect(() => {
-    if (!state.selectedDeck) {
-      navigation.goBack();
-      return;
-    }
-    setAllCards(getDeckCards(state.selectedDeck.id));
-  }, [state.selectedDeck, navigation]);
+    const lockOrientation = async () => {
+      try {
+        const setting = await getOrientationSetting();
+        if (setting === 'portrait') Orientation.lockToPortrait();
+        else if (setting === 'landscape') Orientation.lockToLandscape();
+        else Orientation.unlockAllOrientations();
+      } catch (e) { console.error('Falha ao travar a orientação:', e); }
+    };
+    lockOrientation();
+    return () => Orientation.unlockAllOrientations();
+  }, []);
 
-  // Inicia o jogo se for o host
   useEffect(() => {
-    if (state.currentRoom && allCards.length > 0 && !gameState) {
-      if (state.currentRoom.hostNickname === state.playerNickname) {
-        const players = Object.keys(state.currentRoom.players);
-        if (players.length >= 2) {
-          startGame(roomId, players, allCards);
-        }
-      }
-    }
-  }, [state.currentRoom, allCards, gameState, state.playerNickname, roomId]);
-
-  // Listener para o estado do jogo
-  useEffect(() => {
-    const unsubscribe = listenToGameState(roomId, setGameState);
+    if (isSinglePlayer) return;
+    const unsubscribe = listenToGameState(roomId, setMultiplayerGameState);
     return () => unsubscribe();
-  }, [roomId]);
+  }, [roomId, isSinglePlayer]);
 
-  // Atualiza a mão do jogador
+  // Este useEffect para iniciar o jogo foi removido, pois a lógica agora está no LobbyScreen
+  
   useEffect(() => {
-    if (gameState && allCards.length > 0 && gameState.playerCards) {
-      const playerCardIds = gameState.playerCards[state.playerNickname] || [];
+    if (gameState?.playerCards && allCards.length > 0) {
+      const playerCardIds = gameState.playerCards[globalState.playerNickname] || [];
       const hand = playerCardIds.map(id => allCards.find(card => card.id === id)).filter(Boolean) as Card[];
       setPlayerHand(hand);
     } else {
       setPlayerHand([]);
     }
-  }, [gameState, allCards, state.playerNickname]);
+  }, [gameState, allCards, globalState.playerNickname]);
 
-  if (!state.currentRoom || !state.currentRoom.players || !gameState) {
+  useEffect(() => {
+    if (isSinglePlayer && singlePlayerData.roundResult) {
+      setShowResultModal(true);
+    }
+  }, [isSinglePlayer, singlePlayerData.roundResult]);
+
+  useEffect(() => {
+    if (!isSinglePlayer && isMultiplayerRoundEnding) {
+      setShowResultModal(true);
+    }
+  }, [isSinglePlayer, isMultiplayerRoundEnding]);
+
+  const handleConfirmTurn = useCallback(() => {
+    if (!cardToConfirm || !tentativeAttribute) return;
+    if (isSinglePlayer) {
+      singlePlayerData.handlePlayerTurn(cardToConfirm, tentativeAttribute);
+    } else {
+      // A lógica multiplayer é tratada pelo hook usePlayerHand, que já tem acesso ao roomId
+      // e às funções do gameService.
+    }
+    resetHandState();
+  }, [isSinglePlayer, cardToConfirm, tentativeAttribute, singlePlayerData, resetHandState]);
+
+  const handleNextRound = () => {
+    setShowResultModal(false);
+    if (isSinglePlayer) {
+      singlePlayerData.startNextRound();
+    } else {
+      onMultiplayerAnimationComplete();
+    }
+  };
+
+  const handleCloseGame = () => {
+    setShowResultModal(false);
+    navigation.goBack();
+  };
+
+  if (!gameState || allCards.length === 0) {
     return (<SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#007AFF" /><Text style={styles.loadingText}>Carregando jogo...</Text></SafeAreaView>);
   }
 
-  if (gameState.gamePhase === 'spinning') {
-    return (
-      <SafeAreaView style={styles.container}>
-        <StyledSpinWheel
-            players={Object.keys(state.currentRoom.players)}
-            selectedPlayer={gameState.spinResult || null}
-            isSpinning={true}
-            onSpinComplete={() => {}}
-        />
-      </SafeAreaView>
-    );
-  }
+  const opponents: Player[] = isSinglePlayer
+    ? [{ nickname: 'Bot', avatar: '🤖', isBot: true, isHost: false, isReady: true, joinedAt: '', status: 'active' }]
+    : Object.values(globalState.currentRoom?.players || {}).filter(p => p.nickname !== globalState.playerNickname);
 
-  const opponents = Object.values(state.currentRoom.players).filter(p => p.nickname !== state.playerNickname);
   const getOpponentPositions = (orient: OrientationType, count: number): ('top' | 'topLeft' | 'topRight' | 'left' | 'right')[] => {
     if (orient === 'LANDSCAPE') {
         if (count === 1) return ['top'];
@@ -184,18 +217,35 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
   const isHandVisible = gameState.gamePhase === 'selecting' && !cardToConfirm && !hasPlayedCard;
   const startPos = animatingOpponentCard ? coordinates[animatingOpponentCard.nickname] : null;
 
+  const resultModalData: RoundResult | null = isSinglePlayer 
+    ? singlePlayerData.roundResult
+    : (gameState.gamePhase === 'comparing' || gameState.gamePhase === 'tie' || gameState.gamePhase === 'finished')
+      ? { 
+          winners: gameState.roundWinner ? [gameState.roundWinner] : [], 
+          playerCards: {}, // Este dado é construído no modal, então um objeto vazio é suficiente aqui
+          selectedAttribute: gameState.selectedAttribute || '' 
+        }
+      : null;
+
   return (
     <ImageBackground source={require('../assets/images/table-background.png')} style={styles.backgroundImage}>
       <SafeAreaView style={styles.container}>
-        <BotController roomId={roomId} gameState={gameState} players={state.currentRoom.players} allCards={allCards} />
+        {!isSinglePlayer && globalState.currentRoom && (
+          <BotController roomId={roomId} gameState={gameState} players={globalState.currentRoom.players} allCards={allCards} />
+        )}
+        
+        <TurnIndicator currentPlayer={gameState.currentPlayer} coordinates={coordinates} orientation={orientation} />
+
         <View style={[styles.topSection, styles[`topSection_${orientation}`]]}>
-          <RodadaInfo gameState={gameState} playerNickname={state.playerNickname} />
+          <RodadaInfo gameState={gameState} playerNickname={globalState.playerNickname} />
         </View>
+        
         {opponents.map((player, index) => (
           <PlayerDisplay
             key={player.nickname}
             player={player}
             cardCount={gameState.playerCards?.[player.nickname]?.length || 0}
+            totalCards={allCards.length}
             position={opponentPositions[index]}
             isCurrentPlayer={gameState.currentPlayer === player.nickname}
             orientation={orientation}
@@ -205,28 +255,24 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
         <Arena
           gameState={gameState}
           allCards={allCards}
-          isRoundEnding={isRoundEnding}
-          onAnimationComplete={onAnimationComplete}
+          isRoundEnding={showResultModal}
+          onAnimationComplete={handleNextRound}
           animatingCardPlayer={animatingOpponentCard?.nickname}
           orientation={orientation}
         />
 
-        <View style={[styles.bottomSection, styles[`bottomSection_${orientation}`]]}>
-          <AnimatedHand
-              cards={playerHand}
-              onSelectCard={handleCardSelection}
-              hasPlayedCard={hasPlayedCard}
-              isFirstRound={gameState.currentRound === 1}
-              isVisible={isHandVisible}
-          />
+        <View 
+          style={[styles.bottomSection, styles[`bottomSection_${orientation}`]]}
+          onLayout={(event) => {
+            playerHandLayoutRef.current = event.nativeEvent.layout;
+            setCoordinate(globalState.playerNickname, event.nativeEvent.layout);
+          }}
+        >
+          <AnimatedHand cards={playerHand} onSelectCard={handleCardSelection} hasPlayedCard={hasPlayedCard} isFirstRound={gameState.currentRound === 1} isVisible={isHandVisible}/>
         </View>
 
         {animatingOpponentCard && startPos && (
-          <OpponentCardAnimation
-            card={animatingOpponentCard.card}
-            startPos={startPos}
-            onAnimationComplete={clearAnimatingOpponentCard}
-          />
+          <OpponentCardAnimation card={animatingOpponentCard.card} startPos={startPos} onAnimationComplete={clearAnimatingOpponentCard} />
         )}
 
         {cardToConfirm && (
@@ -234,23 +280,12 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
             <Text style={styles.confirmationTitle}>
               {isCurrentPlayer ? 'Escolha um atributo:' : 'Sua carta:'}
             </Text>
-            <Carta
-              card={cardToConfirm}
-              isRevealed={true}
-              isSelected={true}
-              isSelectable={false}
-              isAttributeSelectable={isCurrentPlayer}
-              onAttributeSelect={setTentativeAttribute}
-              selectedAttribute={tentativeAttribute || undefined}
-            />
+            <Carta card={cardToConfirm} isRevealed={true} isSelected={true} isSelectable={false} isAttributeSelectable={isCurrentPlayer} onAttributeSelect={setTentativeAttribute} selectedAttribute={tentativeAttribute || undefined}/>
           </View>
         )}
 
         {cardToConfirm && isCurrentPlayer && !hasPlayedCard && (
-            <View style={[
-                styles.actionButtonContainer,
-                orientation === 'LANDSCAPE' && styles.actionButtonContainer_LANDSCAPE
-            ]}>
+            <View style={[ styles.actionButtonContainer, orientation === 'LANDSCAPE' && styles.actionButtonContainer_LANDSCAPE ]}>
                 {orientation === 'PORTRAIT' ? (
                     <TouchableOpacity style={[styles.actionButton, styles.confirmButtonFullWidth]} onPress={handleConfirmTurn}>
                         <Text style={styles.actionButtonText}>Confirmar Jogada</Text>
@@ -263,6 +298,17 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
                 )}
             </View>
         )}
+
+        <ResultadoModal
+          visible={showResultModal}
+          roundResult={resultModalData}
+          gameState={gameState}
+          allCards={allCards}
+          playerNickname={globalState.playerNickname}
+          onClose={handleCloseGame}
+          onNextRound={handleNextRound}
+          isHost={isSinglePlayer || globalState.currentRoom?.hostNickname === globalState.playerNickname}
+        />
       </SafeAreaView>
     </ImageBackground>
   );

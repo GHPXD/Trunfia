@@ -23,14 +23,18 @@ const Arena: React.FC<ArenaProps> = ({ gameState, allCards, isRoundEnding, onAni
   const isComparingOrEnding = gameState.gamePhase === 'comparing' || isRoundEnding;
 
   return (
-    <View style={[
+    <View 
+      style={[
         styles.arenaContainer,
         orientation === 'PORTRAIT' 
             ? styles.arenaContainer_PORTRAIT
             : isComparingOrEnding
-                ? styles.arenaContainer_LANDSCAPE_Comparing // Estilo de comparação em paisagem
-                : styles.arenaContainer_LANDSCAPE, // Estilo padrão em paisagem
-    ]}>
+                ? styles.arenaContainer_LANDSCAPE_Comparing
+                : styles.arenaContainer_LANDSCAPE,
+      ]}
+      // 1. Usar pointerEvents para permitir toques através da Arena durante a animação
+      pointerEvents="box-none"
+    >
       {roundCards.map(([playerNickname, cardId], index) => {
         if (playerNickname === animatingCardPlayer) {
           return null;
@@ -52,6 +56,7 @@ const Arena: React.FC<ArenaProps> = ({ gameState, allCards, isRoundEnding, onAni
               onAnimationComplete={onAnimationComplete}
               index={index}
               totalCards={roundCards.length}
+              winnerNickname={gameState.roundWinner} // 2. Passar o nickname do vencedor
             />
           </View>
         );
@@ -63,26 +68,25 @@ const Arena: React.FC<ArenaProps> = ({ gameState, allCards, isRoundEnding, onAni
 const styles = StyleSheet.create({
   arenaContainer: {
     position: 'absolute',
+    top: 0,
+    bottom: 0,
     left: 0,
     right: 0,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center', // 3. Centralizar verticalmente para a animação
+    justifyContent: 'center', // 4. Centralizar horizontalmente
     gap: 16,
     zIndex: 5,
     paddingHorizontal: 16,
   },
   arenaContainer_PORTRAIT: {
-    top: '40%',
-    justifyContent: 'center',
+    // Os estilos de posicionamento agora são gerenciados pelo flexbox centralizado
   },
   arenaContainer_LANDSCAPE: {
-    top: '35%',
-    justifyContent: 'center',
+    // Os estilos de posicionamento agora são gerenciados pelo flexbox centralizado
   },
   arenaContainer_LANDSCAPE_Comparing: {
-    top: '15%',
     justifyContent: 'space-around',
-    alignItems: 'center',
     paddingHorizontal: 20,
   },
   cardDisplay: {
