@@ -20,7 +20,7 @@ import { RootStackParamList, GameState, Card, Player, RoundResult } from '../typ
 import { useGame } from '../contexts/GameContext';
 import { useAnimationCoordinates } from '../contexts/AnimationCoordinateContext';
 import { useOrientation, Orientation as OrientationType } from '../hooks/useOrientation';
-import { startGame, listenToGameState } from '../services/gameService';
+import { listenToGameState } from '../services/gameService';
 import { getDeckCards } from '../data/decks';
 import { getOrientationSetting } from '../services/storageService';
 import RodadaInfo from '../components/game/RodadaInfo';
@@ -82,7 +82,9 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
   const orientation = useOrientation();
 
   const singlePlayerData = useSinglePlayerGame(isSinglePlayer ? globalState.selectedDeck?.id || 'paises' : 'paises', botDifficulty);
-  const [multiplayerGameState, setMultiplayerGameState] = useState<GameState | null>(null);
+  const [multiplayerGameState, setMultiplayerGameState] = useState<GameState | null>(
+    () => globalState.currentRoom?.gameState || null
+  );
 
   const gameState = isSinglePlayer ? singlePlayerData.gameState : multiplayerGameState;
   const [allCards, setAllCards] = useState<Card[]>([]);
@@ -106,6 +108,7 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
     setTentativeAttribute,
     handleCardSelection,
     resetHandState,
+    handleConfirmTurn: handleMultiplayerConfirmTurn,
   } = usePlayerHand({
     roomId,
     playerNickname: globalState.playerNickname,
@@ -146,8 +149,6 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
     return () => unsubscribe();
   }, [roomId, isSinglePlayer]);
 
-  // Este useEffect para iniciar o jogo foi removido, pois a lógica agora está no LobbyScreen
-  
   useEffect(() => {
     if (gameState?.playerCards && allCards.length > 0) {
       const playerCardIds = gameState.playerCards[globalState.playerNickname] || [];
@@ -171,15 +172,15 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
   }, [isSinglePlayer, isMultiplayerRoundEnding]);
 
   const handleConfirmTurn = useCallback(() => {
-    if (!cardToConfirm || !tentativeAttribute) return;
     if (isSinglePlayer) {
-      singlePlayerData.handlePlayerTurn(cardToConfirm, tentativeAttribute);
+      if (cardToConfirm && tentativeAttribute) {
+        singlePlayerData.handlePlayerTurn(cardToConfirm, tentativeAttribute);
+      }
     } else {
-      // A lógica multiplayer é tratada pelo hook usePlayerHand, que já tem acesso ao roomId
-      // e às funções do gameService.
+      handleMultiplayerConfirmTurn();
     }
     resetHandState();
-  }, [isSinglePlayer, cardToConfirm, tentativeAttribute, singlePlayerData, resetHandState]);
+  }, [isSinglePlayer, cardToConfirm, tentativeAttribute, singlePlayerData, resetHandState, handleMultiplayerConfirmTurn]);
 
   const handleNextRound = () => {
     setShowResultModal(false);
@@ -195,8 +196,14 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
     navigation.goBack();
   };
 
+  // Condição de carregamento principal, agora mais robusta
   if (!gameState || allCards.length === 0) {
-    return (<SafeAreaView style={styles.loadingContainer}><ActivityIndicator size="large" color="#007AFF" /><Text style={styles.loadingText}>Carregando jogo...</Text></SafeAreaView>);
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text style={styles.loadingText}>Carregando jogo...</Text>
+      </SafeAreaView>
+    );
   }
 
   const opponents: Player[] = isSinglePlayer
@@ -222,7 +229,13 @@ const GameScreen: React.FC<Props> = ({ route, navigation }) => {
     : (gameState.gamePhase === 'comparing' || gameState.gamePhase === 'tie' || gameState.gamePhase === 'finished')
       ? { 
           winners: gameState.roundWinner ? [gameState.roundWinner] : [], 
-          playerCards: {}, // Este dado é construído no modal, então um objeto vazio é suficiente aqui
+          playerCards: gameState.currentRoundCards ? Object.entries(gameState.currentRoundCards).reduce((acc, [player, cardId]) => {
+            const card = allCards.find(c => c.id === cardId);
+            if (card && gameState.selectedAttribute) {
+              acc[player] = { cardId, value: card.attributes[gameState.selectedAttribute] };
+            }
+            return acc;
+          }, {} as RoundResult['playerCards']) : {},
           selectedAttribute: gameState.selectedAttribute || '' 
         }
       : null;

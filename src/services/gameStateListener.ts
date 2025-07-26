@@ -1,6 +1,6 @@
 // src/services/gameStateListener.ts
 
-import { ref, onValue, off, set } from 'firebase/database';
+import { ref, onValue, off, update } from 'firebase/database'; // Alterado de 'set' para 'update'
 import { database } from '../config/firebase';
 import { GameState, Card } from '../types';
 import { distributeCards } from '../utils/gameUtils';
@@ -36,6 +36,12 @@ export const startGame = async (
     tiePot: [],
   };
 
-  const gameStateRef = ref(database, `${ROOMS_PATH}/${roomId}/gameState`);
-  await set(gameStateRef, initialGameState);
+  const roomRef = ref(database, `${ROOMS_PATH}/${roomId}`);
+  
+  // AQUI ESTÁ A CORREÇÃO:
+  // Atualizamos o status e o gameState na mesma operação.
+  await update(roomRef, {
+    status: 'playing',
+    gameState: initialGameState,
+  });
 };

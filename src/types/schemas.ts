@@ -32,6 +32,8 @@ export const GameStateSchema = z.object({
 });
 
 // Esquema para uma sala de jogo
+// AQUI ESTÁ A CORREÇÃO PRINCIPAL:
+// Usamos .refine() para criar uma regra condicional.
 export const RoomSchema = z.object({
   id: z.string(),
   code: z.string(),
@@ -44,7 +46,14 @@ export const RoomSchema = z.object({
   maxPlayers: z.number(),
   createdAt: z.string(),
   lastActivity: z.string(),
-  // AQUI ESTÁ A CORREÇÃO: Usamos 'nullable' e 'optional'
-  // para permitir que o campo esteja ausente ou seja nulo.
-  gameState: GameStateSchema.nullable().optional(), 
+  gameState: GameStateSchema.optional(), // O campo é opcional...
+}).refine(data => {
+    // ...MAS, se o status for 'playing' ou 'finished', ele DEVE existir.
+    if (data.status === 'playing' || data.status === 'finished') {
+        return data.gameState != null;
+    }
+    return true; // Se o status for 'waiting', não validamos o gameState.
+}, {
+    message: "gameState é obrigatório quando o jogo está em andamento ou finalizado",
+    path: ["gameState"], // Caminho do erro
 });

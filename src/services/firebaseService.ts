@@ -1,15 +1,15 @@
 // src/services/firebaseService.ts
 
-import { 
-  ref, 
-  push, 
-  set, 
-  get, 
-  remove, 
-  onValue, 
-  off, 
-  query, 
-  orderByChild, 
+import {
+  ref,
+  push,
+  set,
+  get,
+  remove,
+  onValue,
+  off,
+  query,
+  orderByChild,
   equalTo,
   update
 } from 'firebase/database';
@@ -23,56 +23,54 @@ const ROOMS_PATH = 'rooms';
 const CHAT_PATH = 'chat';
 
 export const createRoom = async (
-    hostNickname: string,
-    hostAvatar: string,
-    deckId: string,
-    deckName: string,
-    isPrivate: boolean = false
-  ): Promise<Room> => {
-    try {
-      const roomCode = generateRoomCode();
-      const roomRef = push(ref(database, ROOMS_PATH));
-      const roomId = roomRef.key;
-      
-      if (!roomId) {
-        throw new Error('Erro ao gerar ID da sala');
-      }
-  
-      const hostPlayer: Player = {
-        nickname: hostNickname,
-        avatar: hostAvatar,
-        isHost: true,
-        joinedAt: new Date().toISOString(),
-        isReady: true,
-        status: 'active',
-      };
-  
-      // Removido o campo 'gameState' da criação inicial da sala
-      const newRoom: Omit<Room, 'gameState'> = {
-        id: roomId,
-        code: roomCode,
-        hostNickname,
-        deckId,
-        deckName,
-        players: {
-          [hostNickname]: hostPlayer,
-        },
-        status: 'waiting',
-        isPrivate,
-        maxPlayers: 4,
-        createdAt: new Date().toISOString(),
-        lastActivity: new Date().toISOString(),
-      };
-  
-      await set(roomRef, newRoom);
-      return { ...newRoom, gameState: undefined }; // Retorna o tipo Room completo
-    } catch (error) {
-      console.error('Erro ao criar sala:', error);
-      throw new Error('Não foi possível criar a sala');
+  hostNickname: string,
+  hostAvatar: string,
+  deckId: string,
+  deckName: string,
+  isPrivate: boolean = false
+): Promise<Room> => {
+  try {
+    const roomCode = generateRoomCode();
+    const roomRef = push(ref(database, ROOMS_PATH));
+    const roomId = roomRef.key;
+    
+    if (!roomId) {
+      throw new Error('Erro ao gerar ID da sala');
     }
-  };
-  
-// ... (resto do arquivo sem alterações)
+
+    const hostPlayer: Player = {
+      nickname: hostNickname,
+      avatar: hostAvatar,
+      isHost: true,
+      joinedAt: new Date().toISOString(),
+      isReady: true,
+      status: 'active',
+    };
+
+    const newRoom: Omit<Room, 'gameState'> = {
+      id: roomId,
+      code: roomCode,
+      hostNickname,
+      deckId,
+      deckName,
+      players: {
+        [hostNickname]: hostPlayer,
+      },
+      status: 'waiting',
+      isPrivate,
+      maxPlayers: 4,
+      createdAt: new Date().toISOString(),
+      lastActivity: new Date().toISOString(),
+    };
+
+    await set(roomRef, newRoom);
+    return { ...newRoom, gameState: undefined };
+  } catch (error) {
+    console.error('Erro ao criar sala:', error);
+    throw new Error('Não foi possível criar a sala');
+  }
+};
+
 export const joinRoom = async (
   roomCode: string,
   playerNickname: string,
@@ -161,7 +159,11 @@ export const leaveRoom = async (roomId: string, playerNickname: string): Promise
 
     const room: Room = snapshot.val();
 
-    await remove(ref(database, `${ROOMS_PATH}/${roomId}/players/${playerNickname}`));
+    // Use update para remover um jogador, é mais seguro que `remove` direto no path
+    const updates = {
+      [`${ROOMS_PATH}/${roomId}/players/${playerNickname}`]: null,
+    };
+    await update(ref(database), updates);
 
     const remainingPlayers = Object.keys(room.players).filter(p => p !== playerNickname);
 
@@ -172,12 +174,12 @@ export const leaveRoom = async (roomId: string, playerNickname: string): Promise
 
     if (room.hostNickname === playerNickname) {
       const newHostNickname = remainingPlayers[0];
-      const updates = {
+      const hostUpdates = {
         [`${ROOMS_PATH}/${roomId}/hostNickname`]: newHostNickname,
         [`${ROOMS_PATH}/${roomId}/players/${newHostNickname}/isHost`]: true,
         [`${ROOMS_PATH}/${roomId}/lastActivity`]: new Date().toISOString(),
       };
-      await update(ref(database), updates);
+      await update(ref(database), hostUpdates);
     }
   } catch (error) {
     console.error('Erro ao sair da sala:', error);
@@ -199,8 +201,9 @@ export const listenToRoom = (
       if (validationResult.success) {
         callback(validationResult.data);
       } else {
+        // Loga o erro mas não necessariamente limpa a sala para o usuário,
+        // evitando que a tela pisque ou desmonte por um erro temporário de dados.
         console.error('❌ Erro de validação de dados da sala:', validationResult.error.flatten());
-        callback(null);
       }
     } else {
       callback(null);

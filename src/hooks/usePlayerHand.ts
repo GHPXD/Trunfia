@@ -25,12 +25,13 @@ export const usePlayerHand = ({
     if (isCurrentPlayer) {
       setCardToConfirm(card);
     } else {
-      playCard(roomId, playerNickname, card.id).catch(error => {
-        Alert.alert('Erro de Conexão', 'Não foi possível registrar sua jogada.');
+      playCard(roomId, playerNickname, card.id).catch((error: any) => {
+        Alert.alert('Erro de Conexão', error.message || 'Não foi possível registrar sua jogada.');
       });
     }
   }, [hasPlayedCard, isCurrentPlayer, roomId, playerNickname]);
 
+  // Esta função não recebe argumentos, ela usa seu próprio estado interno
   const handleConfirmTurn = useCallback(() => {
     if (!cardToConfirm || !isCurrentPlayer) return;
     if (!tentativeAttribute) {
@@ -41,15 +42,14 @@ export const usePlayerHand = ({
     const playedCardId = cardToConfirm.id;
     const playedAttribute = tentativeAttribute;
     
-    // Reseta o estado imediatamente para uma resposta mais rápida da UI
     setCardToConfirm(null);
     setTentativeAttribute(null);
 
     Promise.all([
       playCard(roomId, playerNickname, playedCardId),
       selectAttribute(roomId, playedAttribute)
-    ]).catch(error => {
-      Alert.alert('Erro de Conexão', 'Não foi possível confirmar a jogada.');
+    ]).catch((error: any) => {
+      Alert.alert('Erro de Conexão', error.message || 'Não foi possível confirmar a jogada.');
     });
   }, [cardToConfirm, isCurrentPlayer, tentativeAttribute, roomId, playerNickname]);
 
@@ -63,7 +63,7 @@ export const usePlayerHand = ({
     tentativeAttribute,
     setTentativeAttribute,
     handleCardSelection,
-    handleConfirmTurn,
+    handleConfirmTurn, // Exportando a função com o nome correto
     resetHandState,
   };
 };

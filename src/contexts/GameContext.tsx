@@ -1,22 +1,22 @@
 // src/contexts/GameContext.tsx
 
 import React, { createContext, useContext, useReducer, ReactNode, useCallback } from 'react';
-import { Deck, GameContextState, Room } from '../types';
+import { Deck, GameContextState, Room, User } from '../types';
 
 // Ações do contexto
 type GameAction =
+  | { type: 'SET_USER_DATA'; payload: User }
   | { type: 'SET_SELECTED_DECK'; payload: Deck | null }
   | { type: 'SET_PLAYER_NICKNAME'; payload: string }
-  | { type: 'SET_PLAYER_AVATAR'; payload: string | null } // Ação para o avatar
+  | { type: 'SET_PLAYER_AVATAR'; payload: string | null }
   | { type: 'SET_CURRENT_ROOM'; payload: Room | null }
   | { type: 'SET_IN_ROOM'; payload: boolean }
   | { type: 'RESET_GAME' };
 
-// O tipo GameContextState agora espera a propriedade playerAvatar
 const initialState: GameContextState = {
   selectedDeck: null,
   playerNickname: '',
-  playerAvatar: null, // Estado inicial do avatar
+  playerAvatar: null,
   currentRoom: null,
   isInRoom: false,
   gameCards: [],
@@ -25,6 +25,12 @@ const initialState: GameContextState = {
 
 const gameReducer = (state: GameContextState, action: GameAction): GameContextState => {
   switch (action.type) {
+    case 'SET_USER_DATA':
+      return {
+        ...state,
+        playerNickname: action.payload.nickname,
+        playerAvatar: action.payload.avatar || null,
+      };
     case 'SET_SELECTED_DECK':
       return { ...state, selectedDeck: action.payload };
     case 'SET_PLAYER_NICKNAME':
@@ -39,7 +45,7 @@ const gameReducer = (state: GameContextState, action: GameAction): GameContextSt
       return {
         ...initialState,
         playerNickname: state.playerNickname,
-        playerAvatar: state.playerAvatar, // Mantém o avatar ao resetar
+        playerAvatar: state.playerAvatar,
       };
     default:
       return state;
@@ -48,6 +54,7 @@ const gameReducer = (state: GameContextState, action: GameAction): GameContextSt
 
 interface GameContextType {
   state: GameContextState;
+  setUserData: (userData: User) => void; // AQUI ESTÁ A CORREÇÃO
   setSelectedDeck: (deck: Deck | null) => void;
   setPlayerNickname: (nickname: string) => void;
   setPlayerAvatar: (avatar: string | null) => void;
@@ -64,6 +71,10 @@ interface GameProviderProps {
 
 export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
   const [state, dispatch] = useReducer(gameReducer, initialState);
+
+  const setUserData = useCallback((userData: User) => {
+    dispatch({ type: 'SET_USER_DATA', payload: userData });
+  }, []);
 
   const setSelectedDeck = useCallback((deck: Deck | null) => {
     dispatch({ type: 'SET_SELECTED_DECK', payload: deck });
@@ -91,13 +102,14 @@ export const GameProvider: React.FC<GameProviderProps> = ({ children }) => {
 
   const value = React.useMemo(() => ({
     state,
+    setUserData, // AQUI ESTÁ A CORREÇÃO
     setSelectedDeck,
     setPlayerNickname,
     setPlayerAvatar,
     setCurrentRoom,
     setInRoom,
     resetGame,
-  }), [state, setSelectedDeck, setPlayerNickname, setPlayerAvatar, setCurrentRoom, setInRoom, resetGame]);
+  }), [state, setUserData, setSelectedDeck, setPlayerNickname, setPlayerAvatar, setCurrentRoom, setInRoom, resetGame]);
 
   return (
     <GameContext.Provider value={value}>

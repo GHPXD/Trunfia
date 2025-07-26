@@ -29,11 +29,13 @@ import {
   listRoomsByDeck,
   leaveRoom,
   listenToRoom,
-  kickPlayerFromRoom, // 1. Importar a nova função
+  kickPlayerFromRoom,
 } from '../services/firebaseService';
+import { startGame } from '../services/gameService';
 import { addBotToRoom, removeBotFromRoom, getBotPlayers } from '../services/botService';
 import { validateRoomCode, formatRoomCode } from '../utils/roomUtils';
 import { saveOrientationSetting, getOrientationSetting } from '../services/storageService';
+import { getDeckCards } from '../data/decks';
 
 type LobbyNavigationProp = StackNavigationProp<RootStackParamList, 'Lobby'>;
 
@@ -42,7 +44,6 @@ interface Props {
 }
 
 const LobbyScreen: React.FC<Props> = ({ navigation }) => {
-  // (O estado e as funções iniciais permanecem os mesmos)
   const { state, setCurrentRoom } = useGame();
   const [publicRooms, setPublicRooms] = useState<Room[]>([]);
   const [roomCode, setRoomCode] = useState('');
@@ -214,7 +215,6 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  // 2. Nova função para lidar com a expulsão de um jogador
   const handleKickPlayer = (playerToKick: string) => {
     if (!state.currentRoom) return;
 
@@ -254,7 +254,7 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const handleStartGame = async () => {
-    if (!state.currentRoom) return;
+    if (!state.currentRoom || !state.selectedDeck) return;
     const playerCount = Object.keys(state.currentRoom.players).length;
     if (playerCount < 2) {
       showToast('É necessário pelo menos 2 jogadores para iniciar.');
@@ -271,14 +271,12 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const startGameNow = async () => {
-    if (!state.currentRoom) return;
+    if (!state.currentRoom || !state.selectedDeck) return;
     setIsLoading(true);
     try {
-      const updates = {
-        [`rooms/${state.currentRoom.id}/status`]: 'playing',
-        [`rooms/${state.currentRoom.id}/lastActivity`]: new Date().toISOString(),
-      };
-      await update(ref(database), updates);
+      const allCards = getDeckCards(state.selectedDeck.id);
+      const players = Object.keys(state.currentRoom.players);
+      await startGame(state.currentRoom.id, players, allCards);
     } catch (error) {
       console.error('Erro ao iniciar jogo:', error);
       showToast('Não foi possível iniciar o jogo. Tente novamente.');
@@ -376,7 +374,6 @@ const LobbyScreen: React.FC<Props> = ({ navigation }) => {
                         <Text style={styles.playerAvatar}>{player.avatar}</Text>
                         <Text style={styles.playerName}>{player.nickname}{player.isHost && ' 👑'}{player.isBot && ' 🤖'}</Text>
                         <Text style={[styles.playerStatus, player.isReady && styles.playerReady]}>{player.isBot ? 'Bot' : (player.isReady ? 'Pronto' : 'Aguardando')}</Text>
-                        {/* 3. Renderizar o botão de expulsão condicionalmente */}
                         {isHost && player.nickname !== state.playerNickname && (
                           <TouchableOpacity 
                             style={styles.kickButton} 
@@ -494,7 +491,6 @@ const Toast = ({ message, animatedValue }: { message: string, animatedValue: Ani
     );
 };
 
-// 4. Adicionar estilos para o novo botão
 const styles = StyleSheet.create({
   backgroundImage: { flex: 1 },
   container: { flex: 1, backgroundColor: '#F5F5F5' },
@@ -560,6 +556,5 @@ const styles = StyleSheet.create({
   startButtonDisabled: { backgroundColor: '#CCC', opacity: 0.6 },
   startButtonText: { fontSize: 16, fontWeight: '600', color: '#FFF' },
 });
-
 
 export default LobbyScreen;
